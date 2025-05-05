@@ -1,0 +1,17 @@
+# Ignore wandb logs
+wandb/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# System/Office files
+~$*
+
+# Ignore weights/saved models if any
+*.pt
+*.pth
+*.ckpt
+
+# Ignore VSCode/Cursor-specific files
+.vscode/
