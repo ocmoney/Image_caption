@@ -50,7 +50,7 @@ config = DecoderConfig(
     dropout=0.1,
     
     # Training
-    batch_size=32,
+    batch_size=8,
     learning_rate=1e-4,
     num_epochs=10,
     weight_decay=0.01,

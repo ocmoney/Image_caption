@@ -164,10 +164,14 @@ def process_dataset():
                 'caption': caption
             })
     
-    # Process in batches of 8
-    batch_size = 8
-    for i in range(0, len(all_examples), batch_size):
-        batch = all_examples[i:i+batch_size]
+    # Process in batches using config.batch_size
+    for i in range(0, len(all_examples), config.batch_size):
+        # Skip the last batch if it's smaller than batch_size
+        if i + config.batch_size > len(all_examples):
+            print(f"Skipping last batch of size {len(all_examples) - i}")
+            continue
+            
+        batch = all_examples[i:i+config.batch_size]
         # Create batch of images and captions
         batch_data = {
             'image': [ex['image'] for ex in batch],
@@ -176,9 +180,9 @@ def process_dataset():
         # Process the batch
         processed = process_batch(batch_data)
         processed_data.append(processed)
-        print(f"Processed batch {i//batch_size + 1}/{(len(all_examples) + batch_size - 1)//batch_size}")
+        print(f"Processed batch {i//config.batch_size + 1}/{(len(all_examples) + config.batch_size - 1)//config.batch_size}")
     
-    print(f"Processed {len(all_examples)} examples in {len(processed_data)} batches")
+    print(f"Processed {len(all_examples) - (len(all_examples) % config.batch_size)} examples in {len(processed_data)} batches")
     return processed_data
 
 def debug_single_example():
