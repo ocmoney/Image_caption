@@ -11,14 +11,16 @@ class DecoderConfig:
     dropout: float = 0.1  # Dropout rate
     
     # Training parameters
-    batch_size: int = 32
+    batch_size: int = 8  # Changed from 32 to 8 to match instance value
     learning_rate: float = 1e-4
     num_epochs: int = 10
     weight_decay: float = 0.01  # L2 regularization
     
     # Dataset parameters
-    train_fraction: float = 0.1  # Fraction of training data to use (0.0 to 1.0)
+    initial_data_fraction: float = 0.1  # Fraction of total data to use initially
+    train_fraction: float = 0.9  # Fraction of initial data to use for training (rest for testing)
     validation_fraction: float = 0.1  # Fraction of validation data to use
+    max_caption_length: int = 32  # Maximum length of captions
     
     # Optional parameters
     device: str = None  # If None, will use CUDA if available, else CPU
@@ -56,8 +58,9 @@ config = DecoderConfig(
     weight_decay=0.01,
     
     # Dataset
-    train_fraction=0.001,# Use all training data
-    validation_fraction=0.001,  # Use all validation data
+    initial_data_fraction=0.1,  # Use 10% of total data
+    train_fraction=0.9,  # Split that 10% into 90% train, 10% test
+    validation_fraction=0.1,  # 10% for validation
     
     # Optional
     device=None,  # Auto-select device

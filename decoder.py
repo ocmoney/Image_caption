@@ -8,7 +8,7 @@ import tempfile
 import os
 
 class TransformerDecoder(nn.Module):
-    def __init__(self, d_model=768, nhead=8, num_layers=6, dim_feedforward=2048, dropout=0.1):
+    def __init__(self, d_model=768, nhead=8, num_layers=6, dim_feedforward=2048, dropout=0.1, vocab_size=50260):  # GPT-2's vocabulary size + 3 special tokens
         super().__init__()
         self.d_model = d_model
         
@@ -24,8 +24,8 @@ class TransformerDecoder(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         
-        # Output layer
-        self.output_layer = nn.Linear(d_model, d_model)
+        # Output projection to vocabulary size
+        self.output_projection = nn.Linear(d_model, vocab_size)
         
     def create_caption_mask(self, seq_len):
         # Create a mask for the caption part (after image patches)
@@ -61,14 +61,14 @@ class TransformerDecoder(nn.Module):
         tgt2 = self.linear2(tgt2)
         tgt = tgt + self.dropout(tgt2)
         
-        # Final output layer
-        output = self.output_layer(tgt)
+        # Project to vocabulary size
+        output = self.output_projection(tgt)
         
         return output
 
 def load_processed_dataset():
     # Initialize wandb
-    wandb.init(project="flickr30k-captioning", name="decoder-training")
+    wandb.init(project="flickr30k", name="decoder-training")
     
     try:
         # Try to download the artifact
@@ -80,40 +80,39 @@ def load_processed_dataset():
             artifact_dir = artifact.download(root=tmp_dir)
             print(f"Artifact downloaded to: {artifact_dir}")
             
-            # Load the dataset directly from the artifact directory
-            # The dataset is stored in the root of the artifact with a train subdirectory
-            processed_dataset = load_from_disk(artifact_dir)
+            # Load the tensors directly
+            data = torch.load(os.path.join(artifact_dir, 'processed_dataset.pt'))
             
             print("Successfully loaded processed dataset from wandb!")
-            print(f"Dataset size: {len(processed_dataset['train'])} examples")
-            return processed_dataset
+            print(f"Dataset size: {data['decoder_inputs'].size(1)} examples")
+            return data
             
     except Exception as e:
         print(f"Could not load dataset from wandb: {e}")
         print("Please run upload_to_wandb.py first to process and upload the dataset.")
         raise
 
-def train_decoder(processed_dataset, config=config):
-    # Ask user for split preference
-    print("\nChoose data split option:")
-    print("1. Use pre-split data (train/val/test)")
-    print("2. Split training data (90% train, 10% test)")
-    choice = input("Enter your choice (1 or 2): ").strip()
+def train_decoder(processed_data, config=config):
+    # Split data into train/test
+    total_examples = processed_data['decoder_inputs'].size(1)
+    train_size = int(config.train_fraction * total_examples)
     
-    if choice == "2":
-        # Split training data into train/test
-        train_size = int(0.9 * len(processed_dataset['train']))
-        train_data = processed_dataset['train'].select(range(train_size))
-        test_data = processed_dataset['train'].select(range(train_size, len(processed_dataset['train'])))
-        processed_dataset = DatasetDict({
-            'train': train_data,
-            'test': test_data
-        })
-        print(f"\nSplit training data into:")
-        print(f"- Training: {len(train_data)} examples")
-        print(f"- Testing: {len(test_data)} examples")
-    else:
-        print("\nUsing pre-split data")
+    # Split the data
+    train_data = {
+        'decoder_inputs': processed_data['decoder_inputs'][:, :train_size, :],
+        'caption_input_ids': processed_data['caption_input_ids'][:train_size, :],
+        'caption_labels': processed_data['caption_labels'][:train_size, :]
+    }
+    
+    test_data = {
+        'decoder_inputs': processed_data['decoder_inputs'][:, train_size:, :],
+        'caption_input_ids': processed_data['caption_input_ids'][train_size:, :],
+        'caption_labels': processed_data['caption_labels'][train_size:, :]
+    }
+    
+    print(f"\nSplit data into:")
+    print(f"- Training: {train_size} examples")
+    print(f"- Testing: {total_examples - train_size} examples")
     
     # Initialize model and move to device
     model = TransformerDecoder(
@@ -121,7 +120,8 @@ def train_decoder(processed_dataset, config=config):
         nhead=config.nhead,
         num_layers=config.num_layers,
         dim_feedforward=config.dim_feedforward,
-        dropout=config.dropout
+        dropout=config.dropout,
+        vocab_size=50260  # GPT-2's vocabulary size + 3 special tokens
     ).to(config.device)
     
     # Initialize optimizer with weight decay
@@ -136,28 +136,41 @@ def train_decoder(processed_dataset, config=config):
     for epoch in range(config.num_epochs):
         model.train()
         
-        # Process each split based on user choice
-        splits = ['train', 'test'] if choice == "2" else ['train', 'val']
-        for split in splits:
-            # Get the dataset for this split
-            dataset = processed_dataset[split]
+        # Process each split
+        for split_name, split_data in [('train', train_data), ('test', test_data)]:
             total_loss = 0
             num_batches = 0
             
             # Process in batches
-            for i in range(0, len(dataset), config.batch_size):
-                batch = dataset[i:i+config.batch_size]
+            batch_size = config.batch_size  # This is the number of examples per batch
+            num_examples = split_data['decoder_inputs'].size(1)
+            
+            for i in range(0, num_examples, batch_size):
+                # Get batch
+                batch_end = min(i + batch_size, num_examples)
+                current_batch_size = batch_end - i
                 
-                # Convert batch data to tensors and move to device
-                decoder_inputs = torch.tensor(batch['decoder_inputs'], dtype=torch.float32).to(config.device)
-                caption_labels = torch.tensor(batch['caption_labels'], dtype=torch.long).to(config.device)
+                # Get decoder inputs [seq_len, batch_size, d_model]
+                decoder_inputs = split_data['decoder_inputs'][:, i:batch_end, :].to(config.device)
+                
+                # Get labels [batch_size, seq_len]
+                caption_labels = split_data['caption_labels'][i:batch_end, :].to(config.device)
                 
                 # Forward pass
-                outputs = model(decoder_inputs, decoder_inputs)
+                outputs = model(decoder_inputs, decoder_inputs)  # [seq_len, batch_size, vocab_size]
+                
+                # Get only the caption part of the outputs (last config.max_caption_length tokens)
+                caption_outputs = outputs[-config.max_caption_length:, :, :]  # [max_caption_length, batch_size, vocab_size]
+                
+                # Reshape outputs and labels for loss calculation
+                # outputs: [batch_size, seq_len, vocab_size]
+                caption_outputs = caption_outputs.permute(1, 0, 2)
                 
                 # Calculate loss
-                loss = criterion(outputs.view(-1, outputs.size(-1)), 
-                               caption_labels.view(-1))
+                # Reshape to [batch_size * seq_len, vocab_size] and [batch_size * seq_len]
+                # This is correct because we want to calculate loss over all tokens in the batch
+                loss = criterion(caption_outputs.reshape(-1, caption_outputs.size(-1)), 
+                               caption_labels.reshape(-1))
                 
                 # Backward pass
                 optimizer.zero_grad()
@@ -169,13 +182,13 @@ def train_decoder(processed_dataset, config=config):
             
             # Calculate average loss per batch
             avg_loss = total_loss / num_batches if num_batches > 0 else 0
-            print(f"Epoch {epoch+1}/{config.num_epochs}, {split} Loss: {avg_loss:.4f}")
+            print(f"Epoch {epoch+1}/{config.num_epochs}, {split_name} Loss: {avg_loss:.4f}")
     
     return model
 
 if __name__ == "__main__":
     # Load processed dataset from wandb
-    processed_dataset = load_processed_dataset()
+    processed_data = load_processed_dataset()
     
     # Train the decoder
-    model = train_decoder(processed_dataset)
+    model = train_decoder(processed_data)

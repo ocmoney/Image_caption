@@ -142,8 +142,8 @@ def process_dataset():
     print("Processing train split...")
     # Calculate how many train examples we need
     total_train = sum(1 for x in dataset['test'] if x['split'] == 'train')
-    num_samples = int(total_train * config.train_fraction)
-    print(f"Taking {num_samples} examples ({config.train_fraction*100}% of train split)...")
+    num_samples = int(total_train * config.initial_data_fraction)  # Changed from train_fraction to initial_data_fraction
+    print(f"Taking {num_samples} examples ({config.initial_data_fraction*100}% of train split)...")
 
     # Collect only the indices we need
     train_indices = []
