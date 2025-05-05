@@ -72,7 +72,7 @@ class TransformerDecoder(nn.Module):
         return x
     
 class CaptionGenerator(nn.Module):
-    def __init__(self, num_heads, num_layers, img_seq_len=197, text_seq_len=65):
+    def __init__(self, num_heads, num_layers, img_seq_len=197, text_seq_len=64):
         super().__init__()
         self.text_embedding = TextEmbedding()
         self.image_tokenizer = ImageTokenizer()
@@ -80,14 +80,22 @@ class CaptionGenerator(nn.Module):
         self.vocab_size = self.text_embedding.embeddings.num_embeddings
         for param in self.image_tokenizer.model.parameters():
             param.requires_grad = False
-        for param in self.text_embedding.embedding.parameters():
+        for param in self.text_embedding.embeddings.parameters():
             param.requires_grad = False
-        self.base_mask = torch.tril(torch.ones(img_seq_len + text_seq_len, img_seq_len + text_seq_len), diagonal=img_seq_len)
+
+        # Create a separator token to split the image and text tokens
+        self.sep_embedding = nn.Embedding(1, self.embedding_dim)
+
+        # Create a base mask to prevent the decoder from attending to future tokens
+        self.base_mask = torch.tril(torch.ones(img_seq_len + text_seq_len + 1, img_seq_len + text_seq_len + 1), diagonal=0)
+        self.base_mask[:img_seq_len + 1, :] = 0 # Prevent the decoder from attending to the image tokens
+
         self.decoder = TransformerDecoder(self.embedding_dim, num_heads, num_layers)
         self.output_layer = nn.Linear(self.embedding_dim, self.vocab_size)
         self.softmax = nn.Softmax(dim=-1)
 
     def build_mask(self, text_mask):
+        # Create a mask to prevent the decoder from attending to padding tokens
         mask = self.base_mask.clone().unsqueeze(0).expand(text_mask.shape[0], -1, -1)
         image_mask = torch.ones(text_mask.shape[0], self.base_mask.shape[0] - text_mask.shape[1], dtype=torch.bool)
         combined_mask = torch.cat([image_mask, text_mask], dim=1)
@@ -97,7 +105,8 @@ class CaptionGenerator(nn.Module):
     def preprocess(self, image, text_token):
         image_token = self.image_tokenizer(image)
         text_token = self.text_embedding(text_token)
-        tokens = torch.cat([image_token, text_token], dim=1)
+        sep_token = self.sep_embedding(torch.tensor([[0]], dtype=torch.long))
+        tokens = torch.cat([image_token, sep_token, text_token], dim=1)
         return tokens
 
     def forward(self, image, text_token, text_mask):
@@ -111,15 +120,18 @@ if __name__ == "__main__":
     text_mask = torch.ones(1, 10, dtype=torch.bool)
     text_mask[0, 3:] = False
     attention_mask = caption_generator.build_mask(text_mask)
-    assert attention_mask.shape == (1, 20, 20)
-    assert attention_mask[0, 0, 0] == 1
-    assert attention_mask[0, 0, 10] == 1
-    assert attention_mask[0, 0, 11] == 0
-    assert attention_mask[0, 0, 19] == 0
+    assert attention_mask.shape == (1, 21, 21)
+    assert attention_mask[0, 0, 0] == 0
+    assert attention_mask[0, 0, 10] == 0
+    assert attention_mask[0, 11, 0] == 1
+    assert attention_mask[0, 11, 11] == 1
+    assert attention_mask[0, 11, 12] == 0
+    assert attention_mask[0, 19, 12] == 1
+    assert attention_mask[0, 19, 19] == 0
 
     caption_generator = CaptionGenerator(num_heads=4, num_layers=3)
     image = Image.open("test.jpeg")
-    text_token = torch.randint(0, 100, (1, 65))
+    text_token = torch.randint(0, 100, (1, 64))
     text_mask = torch.ones(1, 65, dtype=torch.bool)
     text_mask[10:] = False
     print(caption_generator(image, text_token, text_mask).shape)
