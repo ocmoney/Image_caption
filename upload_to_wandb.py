@@ -30,7 +30,7 @@ def upload_dataset():
             'caption_labels': torch.cat(caption_labels, dim=0)  # Concatenate along batch dimension
         }, os.path.join(temp_dir, 'processed_dataset.pt'))
         
-        # Create a new artifact
+        # Create a new artifact with the same name to overwrite
         artifact = wandb.Artifact(
             name="processed_flickr30k",
             type="dataset",
@@ -40,8 +40,8 @@ def upload_dataset():
         # Add the saved tensors to the artifact
         artifact.add_file(os.path.join(temp_dir, 'processed_dataset.pt'))
         
-        # Upload the artifact
-        wandb.log_artifact(artifact)
+        # Upload the artifact with overwrite=True
+        wandb.log_artifact(artifact, aliases=["latest"])
     
     # Finish the run
     wandb.finish()

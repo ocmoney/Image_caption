@@ -6,6 +6,7 @@ from datasets import DatasetDict, load_from_disk
 import wandb
 import tempfile
 import os
+import time
 
 class TransformerDecoder(nn.Module):
     def __init__(self, d_model=768, nhead=8, num_layers=6, dim_feedforward=2048, dropout=0.1, vocab_size=50260):  # GPT-2's vocabulary size + 3 special tokens
@@ -93,6 +94,12 @@ def load_processed_dataset():
         raise
 
 def train_decoder(processed_data, config=config):
+    # Initialize wandb run
+    wandb.init(project="flickr30k", name="decoder-training")
+    
+    # Start timing
+    start_time = time.time()
+    
     # Split data into train/test
     total_examples = processed_data['decoder_inputs'].size(1)
     train_size = int(config.train_fraction * total_examples)
@@ -140,9 +147,11 @@ def train_decoder(processed_data, config=config):
         for split_name, split_data in [('train', train_data), ('test', test_data)]:
             total_loss = 0
             num_batches = 0
+            total_correct = 0
+            total_tokens = 0
             
             # Process in batches
-            batch_size = config.batch_size  # This is the number of examples per batch
+            batch_size = config.batch_size
             num_examples = split_data['decoder_inputs'].size(1)
             
             for i in range(0, num_examples, batch_size):
@@ -163,14 +172,17 @@ def train_decoder(processed_data, config=config):
                 caption_outputs = outputs[-config.max_caption_length:, :, :]  # [max_caption_length, batch_size, vocab_size]
                 
                 # Reshape outputs and labels for loss calculation
-                # outputs: [batch_size, seq_len, vocab_size]
-                caption_outputs = caption_outputs.permute(1, 0, 2)
+                caption_outputs = caption_outputs.permute(1, 0, 2)  # [batch_size, seq_len, vocab_size]
                 
                 # Calculate loss
-                # Reshape to [batch_size * seq_len, vocab_size] and [batch_size * seq_len]
-                # This is correct because we want to calculate loss over all tokens in the batch
                 loss = criterion(caption_outputs.reshape(-1, caption_outputs.size(-1)), 
                                caption_labels.reshape(-1))
+                
+                # Calculate accuracy
+                predictions = torch.argmax(caption_outputs, dim=-1)  # [batch_size, seq_len]
+                correct = (predictions == caption_labels).sum().item()
+                total_correct += correct
+                total_tokens += predictions.numel()
                 
                 # Backward pass
                 optimizer.zero_grad()
@@ -180,9 +192,26 @@ def train_decoder(processed_data, config=config):
                 total_loss += loss.item()
                 num_batches += 1
             
-            # Calculate average loss per batch
+            # Calculate metrics
             avg_loss = total_loss / num_batches if num_batches > 0 else 0
-            print(f"Epoch {epoch+1}/{config.num_epochs}, {split_name} Loss: {avg_loss:.4f}")
+            accuracy = (total_correct / total_tokens) * 100 if total_tokens > 0 else 0
+            
+            # Log metrics to wandb
+            wandb.log({
+                f"{split_name}_loss": avg_loss,
+                f"{split_name}_accuracy": accuracy,
+                "epoch": epoch
+            })
+            
+            print(f"Epoch {epoch+1}/{config.num_epochs}, {split_name} Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%")
+    
+    # Calculate and log total runtime
+    runtime = time.time() - start_time
+    wandb.log({"total_runtime": runtime})
+    print(f"\nTotal runtime: {runtime:.2f} seconds")
+    
+    # Finish wandb run
+    wandb.finish()
     
     return model
 
