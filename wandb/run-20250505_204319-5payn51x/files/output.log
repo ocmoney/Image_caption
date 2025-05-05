@@ -1,0 +1,32 @@
+Processing dataset...
+Processing train split...
+Taking 29 examples (0.1% of train split)...
+Map:   0%|                                                                    | 0/145 [00:53<?, ? examples/s]
+Traceback (most recent call last):
+  File "c:\Users\ollie\OneDrive - University of Bristol\Documents\coding\MLIWeek4\upload_to_wandb.py", line 41, in <module>
+    upload_dataset()
+  File "c:\Users\ollie\OneDrive - University of Bristol\Documents\coding\MLIWeek4\upload_to_wandb.py", line 13, in upload_dataset
+    processed_dataset = process_dataset()
+                        ^^^^^^^^^^^^^^^^^
+  File "c:\Users\ollie\OneDrive - University of Bristol\Documents\coding\MLIWeek4\img_text_concat.py", line 174, in process_dataset
+    processed_splits['train'] = expanded_dataset.map(
+                                ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_dataset.py", line 557, in wrapper
+    out: Union["Dataset", "DatasetDict"] = func(self, *args, **kwargs)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_dataset.py", line 3074, in map
+    for rank, done, content in Dataset._map_single(**dataset_kwargs):
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_dataset.py", line 3516, in _map_single
+    for i, batch in iter_outputs(shard_iterable):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_dataset.py", line 3466, in iter_outputs
+    yield i, apply_function(example, i, offset=offset)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_dataset.py", line 3389, in apply_function
+    processed_inputs = function(*fn_args, *additional_args, **fn_kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\ollie\OneDrive - University of Bristol\Documents\coding\MLIWeek4\img_text_concat.py", line 110, in process_batch
+    decoder_inputs = torch.cat([
+                     ^^^^^^^^^^^
+RuntimeError: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 1 for tensor number 1 in the list.

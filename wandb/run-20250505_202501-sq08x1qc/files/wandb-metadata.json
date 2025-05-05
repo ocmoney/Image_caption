@@ -1,0 +1,27 @@
+{
+  "os": "Windows-11-10.0.22631-SP0",
+  "python": "CPython 3.12.9",
+  "startedAt": "2025-05-05T19:25:01.550017Z",
+  "program": "c:\\Users\\ollie\\OneDrive - University of Bristol\\Documents\\coding\\MLIWeek4\\upload_to_wandb.py",
+  "codePath": "upload_to_wandb.py",
+  "email": "olliecumming3@gmail.com",
+  "root": "C:\\Users\\ollie\\OneDrive - University of Bristol\\Documents\\coding\\MLIWeek4",
+  "host": "DESKTOP-D166M2L",
+  "executable": "C:\\Users\\ollie\\Anaconda3\\envs\\Institue\\python.exe",
+  "codePathLocal": "upload_to_wandb.py",
+  "cpu_count": 4,
+  "cpu_count_logical": 8,
+  "disk": {
+    "/": {
+      "total": "235802718208",
+      "used": "205331681280"
+    }
+  },
+  "memory": {
+    "total": "8345964544"
+  },
+  "cpu": {
+    "count": 4,
+    "countLogical": 8
+  }
+}

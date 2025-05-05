@@ -1,0 +1,44 @@
+Processing dataset...
+Processing dataset...
+Processing train split...
+Taking 29 examples (0.1% of train split)...
+Map:   0%|                                                                    | 0/145 [01:04<?, ? examples/s]
+Traceback (most recent call last):
+  File "c:\Users\ollie\OneDrive - University of Bristol\Documents\coding\MLIWeek4\upload_to_wandb.py", line 44, in <module>
+    upload_dataset()
+  File "c:\Users\ollie\OneDrive - University of Bristol\Documents\coding\MLIWeek4\upload_to_wandb.py", line 13, in upload_dataset
+    processed_dataset = process_dataset()
+                        ^^^^^^^^^^^^^^^^^
+  File "c:\Users\ollie\OneDrive - University of Bristol\Documents\coding\MLIWeek4\img_text_concat.py", line 167, in process_dataset
+    features = Features({
+
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_dataset.py", line 557, in wrapper
+    out: Union["Dataset", "DatasetDict"] = func(self, *args, **kwargs)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_dataset.py", line 3074, in map
+    for rank, done, content in Dataset._map_single(**dataset_kwargs):
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_dataset.py", line 3531, in _map_single
+    writer.write_batch(batch)
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_writer.py", line 606, in write_batch
+    arrays.append(pa.array(typed_sequence))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "pyarrow\\array.pxi", line 252, in pyarrow.lib.array
+  File "pyarrow\\array.pxi", line 114, in pyarrow.lib._handle_arrow_array_protocol
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\arrow_writer.py", line 219, in __arrow_array__
+    storage = to_pyarrow_listarray(data, pa_type)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ollie\Anaconda3\envs\Institue\Lib\site-packages\datasets\features\features.py", line 1594, in to_pyarrow_listarray
+    return pa.array(data, pa_type.storage_dtype)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "pyarrow\\array.pxi", line 372, in pyarrow.lib.array
+  File "pyarrow\\array.pxi", line 42, in pyarrow.lib._sequence_to_array
+  File "pyarrow\\error.pxi", line 155, in pyarrow.lib.pyarrow_internal_check_status
+  File "pyarrow\\error.pxi", line 92, in pyarrow.lib.check_status
+pyarrow.lib.ArrowTypeError: Could not convert tensor([[ 0.3303,  0.0722, -0.1909,  ...,  0.0163,  0.0606,  0.1517],
+        [ 0.3303,  0.0722, -0.1909,  ...,  0.0163,  0.0606,  0.1517],
+        [ 0.3303,  0.0722, -0.1909,  ...,  0.0163,  0.0606,  0.1517],
+        ...,
+        [ 0.3335,  0.0723, -0.1946,  ...,  0.0245,  0.0555,  0.1576],
+        [ 0.3335,  0.0723, -0.1946,  ...,  0.0245,  0.0555,  0.1576],
+        [ 0.3335,  0.0723, -0.1946,  ...,  0.0245,  0.0555,  0.1576]]) with type Tensor: was not a sequence or recognized null for conversion to list type

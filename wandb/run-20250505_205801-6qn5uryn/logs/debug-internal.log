@@ -1,0 +1,15 @@
+{"time":"2025-05-05T20:58:01.7729826+01:00","level":"INFO","msg":"stream: starting","core version":"0.19.9","symlink path":"C:\\Users\\ollie\\OneDrive - University of Bristol\\Documents\\coding\\MLIWeek4\\wandb\\run-20250505_205801-6qn5uryn\\logs\\debug-core.log"}
+{"time":"2025-05-05T20:58:02.1527068+01:00","level":"INFO","msg":"created new stream","id":"6qn5uryn"}
+{"time":"2025-05-05T20:58:02.1532747+01:00","level":"INFO","msg":"stream: started","id":"6qn5uryn"}
+{"time":"2025-05-05T20:58:02.1532747+01:00","level":"INFO","msg":"handler: started","stream_id":"6qn5uryn"}
+{"time":"2025-05-05T20:58:02.1533344+01:00","level":"INFO","msg":"sender: started","stream_id":"6qn5uryn"}
+{"time":"2025-05-05T20:58:02.1533344+01:00","level":"INFO","msg":"writer: Do: started","stream_id":"6qn5uryn"}
+{"time":"2025-05-05T20:58:02.4028071+01:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-05-05T21:00:48.4441966+01:00","level":"INFO","msg":"stream: closing","id":"6qn5uryn"}
+{"time":"2025-05-05T21:00:48.4447207+01:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-05-05T21:00:48.4452486+01:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-05-05T21:00:49.2321736+01:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-05-05T21:00:49.7838645+01:00","level":"INFO","msg":"handler: closed","stream_id":"6qn5uryn"}
+{"time":"2025-05-05T21:00:49.7838645+01:00","level":"INFO","msg":"writer: Close: closed","stream_id":"6qn5uryn"}
+{"time":"2025-05-05T21:00:49.7838645+01:00","level":"INFO","msg":"sender: closed","stream_id":"6qn5uryn"}
+{"time":"2025-05-05T21:00:49.7866864+01:00","level":"INFO","msg":"stream: closed","id":"6qn5uryn"}

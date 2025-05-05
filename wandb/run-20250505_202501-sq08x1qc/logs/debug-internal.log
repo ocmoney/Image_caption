@@ -1,0 +1,15 @@
+{"time":"2025-05-05T20:25:01.6084102+01:00","level":"INFO","msg":"stream: starting","core version":"0.19.9","symlink path":"C:\\Users\\ollie\\OneDrive - University of Bristol\\Documents\\coding\\MLIWeek4\\wandb\\run-20250505_202501-sq08x1qc\\logs\\debug-core.log"}
+{"time":"2025-05-05T20:25:02.0871025+01:00","level":"INFO","msg":"created new stream","id":"sq08x1qc"}
+{"time":"2025-05-05T20:25:02.087675+01:00","level":"INFO","msg":"stream: started","id":"sq08x1qc"}
+{"time":"2025-05-05T20:25:02.087675+01:00","level":"INFO","msg":"handler: started","stream_id":"sq08x1qc"}
+{"time":"2025-05-05T20:25:02.0883099+01:00","level":"INFO","msg":"writer: Do: started","stream_id":"sq08x1qc"}
+{"time":"2025-05-05T20:25:02.0883099+01:00","level":"INFO","msg":"sender: started","stream_id":"sq08x1qc"}
+{"time":"2025-05-05T20:25:02.399561+01:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-05-05T20:28:36.3886242+01:00","level":"INFO","msg":"stream: closing","id":"sq08x1qc"}
+{"time":"2025-05-05T20:28:36.3913487+01:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-05-05T20:28:36.3922634+01:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-05-05T20:28:37.0102044+01:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-05-05T20:28:37.2639416+01:00","level":"INFO","msg":"handler: closed","stream_id":"sq08x1qc"}
+{"time":"2025-05-05T20:28:37.2639416+01:00","level":"INFO","msg":"writer: Close: closed","stream_id":"sq08x1qc"}
+{"time":"2025-05-05T20:28:37.2670469+01:00","level":"INFO","msg":"sender: closed","stream_id":"sq08x1qc"}
+{"time":"2025-05-05T20:28:37.2676083+01:00","level":"INFO","msg":"stream: closed","id":"sq08x1qc"}
