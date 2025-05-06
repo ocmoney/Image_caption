@@ -41,14 +41,14 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    # wandb.init(project="captioner", config={
-    #     "num_epochs": num_epochs,
-    #     "num_heads": num_heads,
-    #     "num_layers": num_layers,
-    #     "learning_rate": learning_rate,
-    #     "batch_size": batch_size,
-    #     "model": str(model)
-    # })
+    wandb.init(project="captioner", config={
+        "num_epochs": num_epochs,
+        "num_heads": num_heads,
+        "num_layers": num_layers,
+        "learning_rate": learning_rate,
+        "batch_size": batch_size,
+        "model": str(model)
+    })
 
     interval = 100
     for epoch in range(num_epochs):
@@ -85,11 +85,11 @@ if __name__ == "__main__":
             epoch_loss.append(loss.item())
             epoch_test_loss.append(test_loss.item())
             epoch_test_accuracy.append(test_accuracy)
-            # wandb.log({
-            #     "train_loss": loss.item(),
-            #     "test_loss": test_loss.item(),
-            #     "test_accuracy": test_accuracy.item(),
-            # })
+            wandb.log({
+                "train_loss": loss.item(),
+                "test_loss": test_loss.item(),
+                "test_accuracy": test_accuracy
+            })
 
             print(f"\r[Epoch {epoch+1}/{num_epochs}], [Step {i+1}/{len(dataloader)}], Train Loss: {loss.item():.4f}, Test Loss: {test_loss.item():.4f}, Test Accuracy: {test_accuracy:.4f}", end="")
             

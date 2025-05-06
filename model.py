@@ -103,7 +103,7 @@ class CaptionGenerator(nn.Module):
         image_mask = torch.ones(text_mask.shape[0], self.base_mask.shape[0] - text_mask.shape[1], dtype=torch.bool, device=self.device)
         combined_mask = torch.cat([image_mask, text_mask], dim=1)
         expanded_mask = mask.masked_fill(torch.logical_not(combined_mask.unsqueeze(1)), 0)
-        return expanded_mask
+        return mask
 
     def preprocess(self, image, text_token):
         text_token = self.text_embedding(text_token)

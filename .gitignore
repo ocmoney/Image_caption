@@ -1,7 +1,4 @@
-<<<<<<< Updated upstream
-__pycache__
-=======
 test.jpeg
 __pycache__
 venv/
->>>>>>> Stashed changes
+wandb
