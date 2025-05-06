@@ -2,3 +2,4 @@ test.jpeg
 __pycache__
 venv/
 wandb
+model/

@@ -25,9 +25,9 @@ if __name__ == "__main__":
     torch.manual_seed(42)
 
     num_epochs = 10
-    num_heads = 4
-    num_layers = 3
-    learning_rate = 1e-3
+    num_heads = 6
+    num_layers = 8
+    learning_rate = 1e-5
     batch_size = 64
     img_seq_len = 197
     text_seq_len = 24
