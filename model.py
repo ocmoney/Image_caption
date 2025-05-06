@@ -100,10 +100,10 @@ class CaptionGenerator(nn.Module):
     def build_mask(self, text_mask):
         # Create a mask to prevent the decoder from attending to padding tokens
         mask = self.base_mask.clone().unsqueeze(0).expand(text_mask.shape[0], -1, -1)
-        image_mask = torch.ones(text_mask.shape[0], self.base_mask.shape[0] - text_mask.shape[1], dtype=torch.bool, device=self.device)
+        image_mask = torch.zeros(text_mask.shape[0], self.base_mask.shape[0] - text_mask.shape[1], dtype=torch.bool, device=self.device)
         combined_mask = torch.cat([image_mask, text_mask], dim=1)
-        expanded_mask = mask.masked_fill(torch.logical_not(combined_mask.unsqueeze(1)), 0)
-        return mask
+        expanded_mask = mask.masked_fill(combined_mask.unsqueeze(1), 0)
+        return expanded_mask
 
     def preprocess(self, image, text_token):
         text_token = self.text_embedding(text_token)
@@ -121,7 +121,7 @@ class CaptionGenerator(nn.Module):
 if __name__ == "__main__":
     caption_generator = CaptionGenerator(num_heads=4, num_layers=3, img_seq_len=10, text_seq_len=10)
     text_mask = torch.ones(1, 10, dtype=torch.bool)
-    text_mask[0, 3:] = False
+    text_mask[0, :3] = False
     attention_mask = caption_generator.build_mask(text_mask)
     assert attention_mask.shape == (1, 21, 21)
     assert attention_mask[0, 0, 0] == 1
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     image = torch.randn(1, 3, 224, 224).to(device)
     text_token = torch.randint(0, 100, (1, 24)).to(device)
     text_mask = torch.ones(1, 25, dtype=torch.bool).to(device)
-    text_mask[10:] = False
+    text_mask[0, :24] = False
     print(caption_generator(image, text_token, text_mask).shape)
     
 
