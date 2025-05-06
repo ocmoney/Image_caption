@@ -3,9 +3,12 @@ import torch
 from transformers import ViTImageProcessorFast, ViTModel, AutoTokenizer, GPT2Model
 from config import config  # Import config from config.py
 import numpy as np
+from tqdm import tqdm
+import time
 
 # Load dataset
 dataset = load_dataset("nlphuji/flickr30k")
+print(f"Available dataset splits: {list(dataset.keys())}")
 
 # Initialize models
 vit_processor = ViTImageProcessorFast.from_pretrained('google/vit-base-patch16-224-in21k')
@@ -135,54 +138,95 @@ def process_batch(batch):
 
 def process_dataset():
     print("Processing dataset...")
-    # Process only the train split with specified fraction
     processed_data = []
 
-    # Process train split only
-    print("Processing train split...")
-    # Calculate how many train examples we need
-    total_train = sum(1 for x in dataset['test'] if x['split'] == 'train')
-    num_samples = int(total_train * config.initial_data_fraction)  # Changed from train_fraction to initial_data_fraction
-    print(f"Taking {num_samples} examples ({config.initial_data_fraction*100}% of train split)...")
-
-    # Collect only the indices we need
-    train_indices = []
-    for i, x in enumerate(dataset['test']):
-        if x['split'] == 'train':
-            train_indices.append(i)
-            if len(train_indices) >= num_samples:
-                break
-
-    train_dataset = dataset['test'].select(train_indices)
-
-    # Collect all examples first
+    # Get all data from test split
+    all_data = dataset['test']
+    
+    # Split data based on the 'split' field
+    train_data = [ex for ex in all_data if ex['split'] == 'train']
+    val_data = [ex for ex in all_data if ex['split'] == 'val']
+    test_data = [ex for ex in all_data if ex['split'] == 'test']
+    
+    print(f"\nFound {len(train_data)} train examples")
+    print(f"Found {len(val_data)} validation examples")
+    print(f"Found {len(test_data)} test examples")
+    
+    # Process train split
+    print("\nProcessing train split...")
+    start_time = time.time()
     all_examples = []
-    for example in train_dataset:
+    for example in train_data[::2]:  # Take every other example
         for caption in example['caption']:
             all_examples.append({
                 'image': example['image'],
                 'caption': caption
             })
+    example_prep_time = time.time() - start_time
+    print(f"Example preparation completed in {example_prep_time:.2f} seconds")
     
-    # Process in batches using config.batch_size
-    for i in range(0, len(all_examples), config.batch_size):
+    print(f"Processing {len(all_examples)} examples in train split")
+    
+    # Process in batches using config.batch_size with progress bar
+    batch_times = []
+    for i in tqdm(range(0, len(all_examples), config.batch_size), desc="Processing train batches"):
+        batch_start_time = time.time()
         # Skip the last batch if it's smaller than batch_size
         if i + config.batch_size > len(all_examples):
-            print(f"Skipping last batch of size {len(all_examples) - i}")
+            print(f"\nSkipping last batch of size {len(all_examples) - i}")
             continue
             
         batch = all_examples[i:i+config.batch_size]
-        # Create batch of images and captions
         batch_data = {
             'image': [ex['image'] for ex in batch],
             'caption': [ex['caption'] for ex in batch]
         }
-        # Process the batch
         processed = process_batch(batch_data)
         processed_data.append(processed)
-        print(f"Processed batch {i//config.batch_size + 1}/{(len(all_examples) + config.batch_size - 1)//config.batch_size}")
+        batch_time = time.time() - batch_start_time
+        batch_times.append(batch_time)
     
-    print(f"Processed {len(all_examples) - (len(all_examples) % config.batch_size)} examples in {len(processed_data)} batches")
+    avg_batch_time = sum(batch_times) / len(batch_times) if batch_times else 0
+    print(f"Average batch processing time: {avg_batch_time:.2f} seconds")
+    print(f"Processed {len(all_examples) - (len(all_examples) % config.batch_size)} examples in train split")
+    
+    # Process validation split
+    print("\nProcessing validation split...")
+    start_time = time.time()
+    val_examples = []
+    for example in val_data[::2]:  # Take every other example
+        for caption in example['caption']:
+            val_examples.append({
+                'image': example['image'],
+                'caption': caption
+            })
+    val_prep_time = time.time() - start_time
+    print(f"Validation example preparation completed in {val_prep_time:.2f} seconds")
+    
+    print(f"Processing {len(val_examples)} examples in validation split")
+    
+    # Process in batches using config.batch_size with progress bar
+    val_batch_times = []
+    for i in tqdm(range(0, len(val_examples), config.batch_size), desc="Processing validation batches"):
+        batch_start_time = time.time()
+        # Skip the last batch if it's smaller than batch_size
+        if i + config.batch_size > len(val_examples):
+            print(f"\nSkipping last batch of size {len(val_examples) - i}")
+            continue
+            
+        batch = val_examples[i:i+config.batch_size]
+        batch_data = {
+            'image': [ex['image'] for ex in batch],
+            'caption': [ex['caption'] for ex in batch]
+        }
+        processed = process_batch(batch_data)
+        processed_data.append(processed)
+        batch_time = time.time() - batch_start_time
+        val_batch_times.append(batch_time)
+    
+    print(f"Processed {len(val_examples) - (len(val_examples) % config.batch_size)} examples in validation split")
+    
+    print(f"\nTotal processed examples: {sum(len(batch['decoder_inputs'].size(1)) for batch in processed_data)}")
     return processed_data
 
 def debug_single_example():

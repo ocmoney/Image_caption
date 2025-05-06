@@ -13,35 +13,69 @@ def upload_dataset():
     
     # Create a temporary directory to save the tensors
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Combine all batches into single tensors
-        decoder_inputs = []
-        caption_input_ids = []
-        caption_labels = []
+        # Separate train and validation data
+        train_data = {
+            'decoder_inputs': [],
+            'caption_input_ids': [],
+            'caption_labels': []
+        }
+        val_data = {
+            'decoder_inputs': [],
+            'caption_input_ids': [],
+            'caption_labels': []
+        }
         
-        for batch in processed_data:
-            decoder_inputs.append(batch['decoder_inputs'])
-            caption_input_ids.append(batch['caption_input_ids'])
-            caption_labels.append(batch['caption_labels'])
+        # First half is train split, second half is validation split
+        split_point = len(processed_data) // 2
         
-        # Save the tensors directly
-        torch.save({
-            'decoder_inputs': torch.cat(decoder_inputs, dim=1),  # Concatenate along batch dimension
-            'caption_input_ids': torch.cat(caption_input_ids, dim=0),  # Concatenate along batch dimension
-            'caption_labels': torch.cat(caption_labels, dim=0)  # Concatenate along batch dimension
-        }, os.path.join(temp_dir, 'processed_dataset.pt'))
+        # Combine batches into single tensors for each split
+        for i, batch in enumerate(processed_data):
+            if i < split_point:
+                train_data['decoder_inputs'].append(batch['decoder_inputs'])
+                train_data['caption_input_ids'].append(batch['caption_input_ids'])
+                train_data['caption_labels'].append(batch['caption_labels'])
+            else:
+                val_data['decoder_inputs'].append(batch['decoder_inputs'])
+                val_data['caption_input_ids'].append(batch['caption_input_ids'])
+                val_data['caption_labels'].append(batch['caption_labels'])
         
-        # Create a new artifact with the same name to overwrite
-        artifact = wandb.Artifact(
-            name="processed_flickr30k",
+        # Concatenate tensors for each split
+        train_tensors = {
+            'decoder_inputs': torch.cat(train_data['decoder_inputs'], dim=1),
+            'caption_input_ids': torch.cat(train_data['caption_input_ids'], dim=0),
+            'caption_labels': torch.cat(train_data['caption_labels'], dim=0)
+        }
+        
+        val_tensors = {
+            'decoder_inputs': torch.cat(val_data['decoder_inputs'], dim=1),
+            'caption_input_ids': torch.cat(val_data['caption_input_ids'], dim=0),
+            'caption_labels': torch.cat(val_data['caption_labels'], dim=0)
+        }
+        
+        # Save the tensors
+        torch.save(train_tensors, os.path.join(temp_dir, 'train_dataset.pt'))
+        torch.save(val_tensors, os.path.join(temp_dir, 'val_dataset.pt'))
+        
+        # Create artifacts
+        train_artifact = wandb.Artifact(
+            name="processed_flickr30k_train",
             type="dataset",
-            description="Processed Flickr30k dataset with image patches and caption embeddings"
+            description="Processed Flickr30k training split with image patches and caption embeddings"
         )
         
-        # Add the saved tensors to the artifact
-        artifact.add_file(os.path.join(temp_dir, 'processed_dataset.pt'))
+        val_artifact = wandb.Artifact(
+            name="processed_flickr30k_val",
+            type="dataset",
+            description="Processed Flickr30k validation split with image patches and caption embeddings"
+        )
         
-        # Upload the artifact with overwrite=True
-        wandb.log_artifact(artifact, aliases=["latest"])
+        # Add files to artifacts
+        train_artifact.add_file(os.path.join(temp_dir, 'train_dataset.pt'))
+        val_artifact.add_file(os.path.join(temp_dir, 'val_dataset.pt'))
+        
+        # Upload artifacts
+        wandb.log_artifact(train_artifact, aliases=["latest"])
+        wandb.log_artifact(val_artifact, aliases=["latest"])
     
     # Finish the run
     wandb.finish()
