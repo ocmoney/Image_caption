@@ -93,7 +93,6 @@ class CaptionGenerator(nn.Module):
 
         self.decoder = TransformerDecoder(self.embedding_dim, num_heads, num_layers)
         self.output_layer = nn.Linear(self.embedding_dim, self.vocab_size)
-        self.softmax = nn.Softmax(dim=-1)
 
         self.to(device)
 
@@ -116,7 +115,7 @@ class CaptionGenerator(nn.Module):
         tokens = self.preprocess(image, text_token)
         mask = self.build_mask(text_mask)
         tokens = self.decoder(tokens, mask)
-        return self.softmax(self.output_layer(tokens))
+        return self.output_layer(tokens)
     
 if __name__ == "__main__":
     caption_generator = CaptionGenerator(num_heads=4, num_layers=3, img_seq_len=10, text_seq_len=10)

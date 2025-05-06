@@ -19,8 +19,9 @@ class ImageTextDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        image = self.processor(self.dataset[idx]["image"], return_tensors="pt")["pixel_values"][0]
-        text = self.dataset[idx]["caption"][torch.randint(0, len(self.dataset[idx]["caption"]), (1,))]
+        item = self.dataset[idx]
+        image = self.processor(item["image"], return_tensors="pt")["pixel_values"][0]
+        text = item["caption"][torch.randint(0, len(item["caption"]), (1,))]
         inputs = self.tokenizer(text, return_tensors="pt", padding='max_length', truncation=True, max_length=24)
         text_token = inputs["input_ids"][0]
         output_text_token = torch.cat([text_token, torch.tensor([self.tokenizer.pad_token_id], dtype=torch.long)])[1:]
@@ -35,7 +36,11 @@ if __name__ == "__main__":
     dataset = ImageTextDataset(split="train")
     print(dataset[0])
     
-    image, input_text_token, text_token, mask = dataset[1000]
+    image, input_text_token, text_token, mask = dataset[200]
+    print("Image shape: ", image.shape)
+    print("Input text token shape: ", input_text_token.shape)
+    print("Text token shape: ", text_token.shape)
+    print("Mask shape: ", mask.shape)
 
     # Turn the input_text_token into a string
     input_text_token = input_text_token.tolist()
@@ -47,5 +52,5 @@ if __name__ == "__main__":
     text_token = [dataset.tokenizer.decode(token) for token in text_token]
     print(text_token)
 
-    image = dataset.get_image(1000)
+    image = dataset.get_image(200)
     image.save("test.jpeg")
