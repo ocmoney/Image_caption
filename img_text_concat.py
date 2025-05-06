@@ -3,6 +3,7 @@ import torch
 from transformers import ViTImageProcessorFast, ViTModel, AutoTokenizer, GPT2Model
 from config import config  # Import config from config.py
 import numpy as np
+from tqdm import tqdm
 
 # Load dataset
 dataset = load_dataset("nlphuji/flickr30k")
@@ -157,7 +158,7 @@ def process_dataset():
 
     # Collect all examples first
     all_examples = []
-    for example in train_dataset:
+    for example in tqdm(train_dataset, desc="Splitting dataset"):
         for caption in example['caption']:
             all_examples.append({
                 'image': example['image'],
@@ -165,7 +166,7 @@ def process_dataset():
             })
     
     # Process in batches using config.batch_size
-    for i in range(0, len(all_examples), config.batch_size):
+    for i in tqdm(range(0, len(all_examples), config.batch_size), desc="Processing train batches"):
         # Skip the last batch if it's smaller than batch_size
         if i + config.batch_size > len(all_examples):
             print(f"Skipping last batch of size {len(all_examples) - i}")
@@ -232,4 +233,3 @@ if __name__ == "__main__":
     # Then process full dataset
     print("\nProcessing full dataset...")
     processed_data = process_dataset()
-

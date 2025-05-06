@@ -7,6 +7,7 @@ import wandb
 import tempfile
 import os
 import time
+from tqdm import tqdm
 
 class TransformerDecoder(nn.Module):
     def __init__(self, d_model=768, nhead=8, num_layers=6, dim_feedforward=2048, dropout=0.1, vocab_size=50260):  # GPT-2's vocabulary size + 3 special tokens
@@ -100,22 +101,36 @@ def train_decoder(processed_data, config=config):
     # Start timing
     start_time = time.time()
     
-    # Split data into train/test
+    # Calculate total examples and split size
     total_examples = processed_data['decoder_inputs'].size(1)
     train_size = int(config.train_fraction * total_examples)
     
-    # Split the data
+    print(f"\nSplitting {total_examples} examples into train/test sets...")
+    
+    # Split the data with progress bar
     train_data = {
-        'decoder_inputs': processed_data['decoder_inputs'][:, :train_size, :],
-        'caption_input_ids': processed_data['caption_input_ids'][:train_size, :],
-        'caption_labels': processed_data['caption_labels'][:train_size, :]
+        'decoder_inputs': torch.zeros((processed_data['decoder_inputs'].size(0), train_size, processed_data['decoder_inputs'].size(2))).to(config.device),
+        'caption_input_ids': torch.zeros((train_size, processed_data['caption_input_ids'].size(1))).to(config.device),
+        'caption_labels': torch.zeros((train_size, processed_data['caption_labels'].size(1))).to(config.device)
     }
     
     test_data = {
-        'decoder_inputs': processed_data['decoder_inputs'][:, train_size:, :],
-        'caption_input_ids': processed_data['caption_input_ids'][train_size:, :],
-        'caption_labels': processed_data['caption_labels'][train_size:, :]
+        'decoder_inputs': torch.zeros((processed_data['decoder_inputs'].size(0), total_examples - train_size, processed_data['decoder_inputs'].size(2))).to(config.device),
+        'caption_input_ids': torch.zeros((total_examples - train_size, processed_data['caption_input_ids'].size(1))).to(config.device),
+        'caption_labels': torch.zeros((total_examples - train_size, processed_data['caption_labels'].size(1))).to(config.device)
     }
+    
+    # Copy data with progress bar
+    for i in tqdm(range(total_examples), desc="Splitting data"):
+        if i < train_size:
+            train_data['decoder_inputs'][:, i, :] = processed_data['decoder_inputs'][:, i, :]
+            train_data['caption_input_ids'][i, :] = processed_data['caption_input_ids'][i, :]
+            train_data['caption_labels'][i, :] = processed_data['caption_labels'][i, :]
+        else:
+            test_idx = i - train_size
+            test_data['decoder_inputs'][:, test_idx, :] = processed_data['decoder_inputs'][:, i, :]
+            test_data['caption_input_ids'][test_idx, :] = processed_data['caption_input_ids'][i, :]
+            test_data['caption_labels'][test_idx, :] = processed_data['caption_labels'][i, :]
     
     print(f"\nSplit data into:")
     print(f"- Training: {train_size} examples")
