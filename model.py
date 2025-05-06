@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-from dataset import TextEmbedding, ImageTokenizer
-from PIL import Image
+from transformers import AutoModel, ViTModel
 
 class AttentionHead(nn.Module):
     def __init__(self, x_dim, y_dim, head_dim):
@@ -74,11 +73,15 @@ class TransformerDecoder(nn.Module):
 class CaptionGenerator(nn.Module):
     def __init__(self, num_heads, num_layers, img_seq_len=197, text_seq_len=24, device="cpu"):
         super().__init__()
-        self.text_embedding = TextEmbedding().embeddings
+        text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased")
+        self.text_embedding = text_model.get_input_embeddings()
+        self.image_tokenizer = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k").to(device)
         self.embedding_dim = self.text_embedding.embedding_dim
         self.vocab_size = self.text_embedding.num_embeddings
         self.device = device
         for param in self.text_embedding.parameters():
+            param.requires_grad = False
+        for param in self.image_tokenizer.parameters():
             param.requires_grad = False
 
         # Create a separator token to split the image and text tokens
@@ -102,14 +105,15 @@ class CaptionGenerator(nn.Module):
         expanded_mask = mask.masked_fill(torch.logical_not(combined_mask.unsqueeze(1)), 0)
         return expanded_mask
 
-    def preprocess(self, image_token, text_token):
+    def preprocess(self, image, text_token):
         text_token = self.text_embedding(text_token)
+        image_token = self.image_tokenizer(pixel_values=image, output_hidden_states=True).last_hidden_state
         sep_token = self.sep_embedding(torch.tensor([[0]], dtype=torch.long, device=self.device)).expand(text_token.shape[0], -1, -1)
         tokens = torch.cat([image_token, sep_token, text_token], dim=1)
         return tokens
 
-    def forward(self, image_token, text_token, text_mask):
-        tokens = self.preprocess(image_token, text_token)
+    def forward(self, image, text_token, text_mask):
+        tokens = self.preprocess(image, text_token)
         mask = self.build_mask(text_mask)
         tokens = self.decoder(tokens, mask)
         return self.softmax(self.output_layer(tokens))
@@ -120,7 +124,7 @@ if __name__ == "__main__":
     text_mask[0, 3:] = False
     attention_mask = caption_generator.build_mask(text_mask)
     assert attention_mask.shape == (1, 21, 21)
-    assert attention_mask[0, 0, 0] == 0
+    assert attention_mask[0, 0, 0] == 1
     assert attention_mask[0, 0, 10] == 0
     assert attention_mask[0, 11, 0] == 1
     assert attention_mask[0, 11, 11] == 1
@@ -131,10 +135,10 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     caption_generator = CaptionGenerator(num_heads=4, num_layers=3, device=device)
-    image_token = torch.randn(1, 197, 768).to(device)
+    image = torch.randn(1, 3, 224, 224).to(device)
     text_token = torch.randint(0, 100, (1, 24)).to(device)
     text_mask = torch.ones(1, 25, dtype=torch.bool).to(device)
     text_mask[10:] = False
-    print(caption_generator(image_token, text_token, text_mask).shape)
+    print(caption_generator(image, text_token, text_mask).shape)
     
 

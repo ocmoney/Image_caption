@@ -8,59 +8,28 @@ import torch.nn as nn
 
 to_tensor = transforms.ToTensor()
 
-class ImageTokenizer(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.model = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
-        self.processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k", use_fast=True)
-
-    def __call__(self, image: list[Image.Image]):
-        inputs = self.processor(image, return_tensors="pt")
-        return self.model(**inputs, output_hidden_states=True).last_hidden_state
-    
-class TextEmbedding(nn.Module):
-    def __init__(self):
-        super().__init__()
-        model = AutoModel.from_pretrained("google-bert/bert-base-uncased")
-        self.embeddings = model.get_input_embeddings()
-
-    def __call__(self, text: torch.Tensor):
-        return self.embeddings(text)
-
 class ImageTextDataset(Dataset):
     def __init__(self, split="test"):
         self.dataset = load_dataset("nlphuji/flickr30k", split="test").train_test_split(test_size=0.1)[split]
         self.tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", use_fast=True)
-        self.image_tokenizer = ImageTokenizer()
-        for param in self.image_tokenizer.model.parameters():
-            param.requires_grad = False
+        self.processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k", use_fast=True)
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        image = self.dataset[idx]["image"]
-        image_token = self.image_tokenizer([image])[0]
+        image = self.processor(self.dataset[idx]["image"], return_tensors="pt")["pixel_values"][0]
         text = self.dataset[idx]["caption"][torch.randint(0, len(self.dataset[idx]["caption"]), (1,))]
         inputs = self.tokenizer(text, return_tensors="pt", padding='max_length', truncation=True, max_length=24)
         text_token = inputs["input_ids"][0]
         input_text_token = torch.cat([torch.tensor([self.tokenizer.cls_token_id], dtype=torch.long), text_token])[:-1]
         mask = input_text_token == 0
-        return image_token, input_text_token, text_token, mask
+        return image, input_text_token, text_token, mask
     
 if __name__ == "__main__":
     torch.manual_seed(42)
     dataset = ImageTextDataset(split="train")
     print(dataset[0])
     
-    image_token, input_text_token, text_token, mask = dataset[0]
-
-    image = Image.open("test.jpeg")
-    image_tokenizer = ImageTokenizer()
-    image_token = image_tokenizer([image])
-    print(image_token.shape)
-
-    text_embedding = TextEmbedding()
-    text_tokens = text_embedding(input_text_token.unsqueeze(0))
-    print(text_tokens.shape)
+    image, input_text_token, text_token, mask = dataset[0]
 

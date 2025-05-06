@@ -8,9 +8,18 @@ import torch.nn as nn
 import itertools
 import os
 from safetensors.torch import save_file
+    
+
+def compute_accuracy(output, target):
+    output = output.argmax(dim=2)
+    mask = target != 0
+    output = output[mask]
+    target = target[mask]
+    correct_predictions = (output == target).sum().item()
+    total_relevant_elements = target.numel()
+    return correct_predictions / total_relevant_elements
 
 if __name__ == "__main__":
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     torch.manual_seed(42)
@@ -21,14 +30,12 @@ if __name__ == "__main__":
     learning_rate = 1e-3
     batch_size = 64
     img_seq_len = 198
-    text_seq_len = 64
+    text_seq_len = 24
     dataset = ImageTextDataset(split="train")
     test_dataset = ImageTextDataset(split="test")
 
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-
+    dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=4, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=4, shuffle=False)
 
     model = CaptionGenerator(num_heads=num_heads, num_layers=num_layers, device=device)
     criterion = nn.CrossEntropyLoss()
@@ -73,18 +80,18 @@ if __name__ == "__main__":
                 test_mask = test_mask.to(device)
                 test_output = model(test_image_token, test_input_text, test_mask)[:, -text_seq_len:, :] # only consider the generated text
                 test_loss = criterion(test_output.transpose(1, 2), test_output_text)
-                test_accuracy = (test_output.argmax(dim=2) == test_output_text).float().mean()
+                test_accuracy = compute_accuracy(test_output, test_output_text)
                 
             epoch_loss.append(loss.item())
             epoch_test_loss.append(test_loss.item())
-            epoch_test_accuracy.append(test_accuracy.item())
+            epoch_test_accuracy.append(test_accuracy)
             # wandb.log({
             #     "train_loss": loss.item(),
             #     "test_loss": test_loss.item(),
             #     "test_accuracy": test_accuracy.item(),
             # })
 
-            print(f"\r[Epoch {epoch+1}/{num_epochs}], [Step {i+1}/{len(dataloader)}], Train Loss: {loss.item():.4f}, Test Loss: {test_loss.item():.4f}, Test Accuracy: {test_accuracy.item():.4f}", end="")
+            print(f"\r[Epoch {epoch+1}/{num_epochs}], [Step {i+1}/{len(dataloader)}], Train Loss: {loss.item():.4f}, Test Loss: {test_loss.item():.4f}, Test Accuracy: {test_accuracy:.4f}", end="")
             
             if i != 0 and i % interval == 0:
                 print(f"\r[Epoch {epoch+1}/{num_epochs}], [Step {i+1}/{len(dataloader)}], Train Loss: {torch.tensor(epoch_loss[-interval:]).mean().item():.4f}, Test Loss: {torch.tensor(epoch_test_loss[-interval:]).mean().item():.4f}, Test Accuracy: {torch.tensor(epoch_test_accuracy[-interval:]).mean().item():.4f}")
