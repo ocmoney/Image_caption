@@ -20,7 +20,8 @@ if __name__ == "__main__":
     num_layers = 3
     learning_rate = 1e-3
     batch_size = 64
-
+    img_seq_len = 198
+    text_seq_len = 64
     dataset = ImageTextDataset(split="train")
     test_dataset = ImageTextDataset(split="test")
 
@@ -29,18 +30,18 @@ if __name__ == "__main__":
 
 
 
-    model = CaptionGenerator(num_heads=num_heads, num_layers=num_layers).to(device)
+    model = CaptionGenerator(num_heads=num_heads, num_layers=num_layers, device=device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    wandb.init(project="captioner", config={
-        "num_epochs": num_epochs,
-        "num_heads": num_heads,
-        "num_layers": num_layers,
-        "learning_rate": learning_rate,
-        "batch_size": batch_size,
-        "model": str(model)
-    })
+    # wandb.init(project="captioner", config={
+    #     "num_epochs": num_epochs,
+    #     "num_heads": num_heads,
+    #     "num_layers": num_layers,
+    #     "learning_rate": learning_rate,
+    #     "batch_size": batch_size,
+    #     "model": str(model)
+    # })
 
     interval = 100
     for epoch in range(num_epochs):
@@ -51,33 +52,37 @@ if __name__ == "__main__":
 
         for i, (batch, test_batch) in enumerate(zip(dataloader, itertools.cycle(test_dataloader))):
             model.train()
-            image, input_text, output_text, mask = batch
+            image_token, input_text, output_text, mask = batch
+            image_token = image_token.to(device)
             input_text = input_text.to(device)
             output_text = output_text.to(device)
             mask = mask.to(device)
-            image = image.to(device)
 
             optimizer.zero_grad()
-            output = model(input_text, image, mask)
+            output = model(image_token, input_text, mask)[:, -text_seq_len:, :] # only consider the generated text
             loss = criterion(output.transpose(1, 2), output_text)
             loss.backward()
             optimizer.step()
 
             with torch.no_grad():
                 model.eval()
-                test_image, test_input_text, test_output_text, test_mask = test_batch
-                test_output = model(test_input_text, test_image, test_mask)
+                test_image_token, test_input_text, test_output_text, test_mask = test_batch
+                test_image_token = test_image_token.to(device)
+                test_input_text = test_input_text.to(device)
+                test_output_text = test_output_text.to(device)
+                test_mask = test_mask.to(device)
+                test_output = model(test_image_token, test_input_text, test_mask)[:, -text_seq_len:, :] # only consider the generated text
                 test_loss = criterion(test_output.transpose(1, 2), test_output_text)
                 test_accuracy = (test_output.argmax(dim=2) == test_output_text).float().mean()
                 
             epoch_loss.append(loss.item())
             epoch_test_loss.append(test_loss.item())
             epoch_test_accuracy.append(test_accuracy.item())
-            wandb.log({
-                "train_loss": loss.item(),
-                "test_loss": test_loss.item(),
-                "test_accuracy": test_accuracy.item(),
-            })
+            # wandb.log({
+            #     "train_loss": loss.item(),
+            #     "test_loss": test_loss.item(),
+            #     "test_accuracy": test_accuracy.item(),
+            # })
 
             print(f"\r[Epoch {epoch+1}/{num_epochs}], [Step {i+1}/{len(dataloader)}], Train Loss: {loss.item():.4f}, Test Loss: {test_loss.item():.4f}, Test Accuracy: {test_accuracy.item():.4f}", end="")
             

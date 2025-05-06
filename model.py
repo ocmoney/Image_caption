@@ -72,45 +72,44 @@ class TransformerDecoder(nn.Module):
         return x
     
 class CaptionGenerator(nn.Module):
-    def __init__(self, num_heads, num_layers, img_seq_len=197, text_seq_len=64):
+    def __init__(self, num_heads, num_layers, img_seq_len=197, text_seq_len=24, device="cpu"):
         super().__init__()
-        self.text_embedding = TextEmbedding()
-        self.image_tokenizer = ImageTokenizer()
-        self.embedding_dim = self.text_embedding.embeddings.embedding_dim
-        self.vocab_size = self.text_embedding.embeddings.num_embeddings
-        for param in self.image_tokenizer.model.parameters():
-            param.requires_grad = False
-        for param in self.text_embedding.embeddings.parameters():
+        self.text_embedding = TextEmbedding().embeddings
+        self.embedding_dim = self.text_embedding.embedding_dim
+        self.vocab_size = self.text_embedding.num_embeddings
+        self.device = device
+        for param in self.text_embedding.parameters():
             param.requires_grad = False
 
         # Create a separator token to split the image and text tokens
         self.sep_embedding = nn.Embedding(1, self.embedding_dim)
 
         # Create a base mask to prevent the decoder from attending to future tokens
-        self.base_mask = torch.tril(torch.ones(img_seq_len + text_seq_len + 1, img_seq_len + text_seq_len + 1), diagonal=0)
-        self.base_mask[:img_seq_len + 1, :] = 0 # Prevent the decoder from attending to the image tokens
+        self.base_mask = torch.tril(torch.ones(img_seq_len + text_seq_len + 1, img_seq_len + text_seq_len + 1, device=self.device), diagonal=0)
+        # self.base_mask[:img_seq_len + 1, :] = 0 # Prevent the decoder from attending to the image tokens
 
         self.decoder = TransformerDecoder(self.embedding_dim, num_heads, num_layers)
         self.output_layer = nn.Linear(self.embedding_dim, self.vocab_size)
         self.softmax = nn.Softmax(dim=-1)
 
+        self.to(device)
+
     def build_mask(self, text_mask):
         # Create a mask to prevent the decoder from attending to padding tokens
         mask = self.base_mask.clone().unsqueeze(0).expand(text_mask.shape[0], -1, -1)
-        image_mask = torch.ones(text_mask.shape[0], self.base_mask.shape[0] - text_mask.shape[1], dtype=torch.bool)
+        image_mask = torch.ones(text_mask.shape[0], self.base_mask.shape[0] - text_mask.shape[1], dtype=torch.bool, device=self.device)
         combined_mask = torch.cat([image_mask, text_mask], dim=1)
         expanded_mask = mask.masked_fill(torch.logical_not(combined_mask.unsqueeze(1)), 0)
         return expanded_mask
 
-    def preprocess(self, image, text_token):
-        image_token = self.image_tokenizer(image)
+    def preprocess(self, image_token, text_token):
         text_token = self.text_embedding(text_token)
-        sep_token = self.sep_embedding(torch.tensor([[0]], dtype=torch.long))
+        sep_token = self.sep_embedding(torch.tensor([[0]], dtype=torch.long, device=self.device)).expand(text_token.shape[0], -1, -1)
         tokens = torch.cat([image_token, sep_token, text_token], dim=1)
         return tokens
 
-    def forward(self, image, text_token, text_mask):
-        tokens = self.preprocess(image, text_token)
+    def forward(self, image_token, text_token, text_mask):
+        tokens = self.preprocess(image_token, text_token)
         mask = self.build_mask(text_mask)
         tokens = self.decoder(tokens, mask)
         return self.softmax(self.output_layer(tokens))
@@ -129,11 +128,13 @@ if __name__ == "__main__":
     assert attention_mask[0, 19, 12] == 1
     assert attention_mask[0, 19, 19] == 0
 
-    caption_generator = CaptionGenerator(num_heads=4, num_layers=3)
-    image = Image.open("test.jpeg")
-    text_token = torch.randint(0, 100, (1, 64))
-    text_mask = torch.ones(1, 65, dtype=torch.bool)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    caption_generator = CaptionGenerator(num_heads=4, num_layers=3, device=device)
+    image_token = torch.randn(1, 197, 768).to(device)
+    text_token = torch.randint(0, 100, (1, 24)).to(device)
+    text_mask = torch.ones(1, 25, dtype=torch.bool).to(device)
     text_mask[10:] = False
-    print(caption_generator(image, text_token, text_mask).shape)
+    print(caption_generator(image_token, text_token, text_mask).shape)
     
 
