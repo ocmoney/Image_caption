@@ -19,10 +19,6 @@ def compute_accuracy(output, target, pad_token_id):
     total_relevant_elements = target.numel()
     return correct_predictions / total_relevant_elements
 
-a = torch.tensor([[0, 1, 2]])
-b = torch.tensor([[[0, 1, 1], [0, 1, 1], [0, 1, 1]]])
-print(compute_accuracy(b, a, 19))
-
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

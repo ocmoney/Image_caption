@@ -4,6 +4,7 @@ from dataset import ImageTextDataset
 import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+from train_captioner import compute_accuracy
 
 def create_inputs(input_text, tokenizer):
     text_token = torch.tensor(input_text, dtype=torch.long)
@@ -43,8 +44,9 @@ if __name__ == "__main__":
         text_token, mask = create_inputs(text, tokenizer)
 
         for j in range(max_length):
-            output = model(image, text_token, mask)
-            output = temperature_sampling(output[0, -max_length-j], temperature=0.7, top_k=20)
+            output = model(image, text_token, mask)[:, -max_length:, :]
+            #output = temperature_sampling(output[0, j], temperature=0.01, top_k=20)
+            output = torch.argmax(output[0, j], dim=-1)
             text[j] = output.item()
             text_token, mask = create_inputs(text, tokenizer)
 
@@ -53,9 +55,10 @@ if __name__ == "__main__":
 
         print(f"Prediction {i}:\n{tokenizer.decode(text)}")
 
-        output = model(image, input_tokens, real_mask)
-        output = torch.argmax(output, dim=-1)
-        output = tokenizer.decode(output.squeeze().tolist())
-        print(f"Force feeding prediction {i}:\n{output}")
+        output = model(image, input_tokens, real_mask)[:, -max_length:, :]
+        text_output = torch.argmax(output, dim=-1)
+        text_output = tokenizer.decode(text_output.squeeze().tolist())
+        print(f"Force feeding prediction {i}:\n{text_output}")
+        print("Accuracy", compute_accuracy(output, output_tokens, tokenizer.pad_token_id))
         print(f"Ground truth {i}:\n{tokenizer.decode(output_tokens.squeeze().tolist())}")
         print()
