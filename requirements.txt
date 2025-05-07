@@ -5,3 +5,5 @@ torchvision
 accelerate
 wandb
 safetensors
+torchtune
+torchao

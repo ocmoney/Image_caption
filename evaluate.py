@@ -19,19 +19,17 @@ def temperature_sampling(logits, temperature=1.0, top_k=20):
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    run_name = "classic-mountain-42"
+    run_name = "golden-silence-46"
     epoch = 10
     max_length = 24
 
-    model = CaptionGenerator(num_heads=6, num_layers=8)
+    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", use_fast=True)
+    model = CaptionGenerator(num_heads=4, num_layers=3, tokenizer=tokenizer)
     model.load_state_dict(load_file(f"model/{run_name}/transformer_{epoch-1}.safetensors"))
     model.eval()
 
     test_dataset = ImageTextDataset(split="test")
     test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-
-    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", use_fast=True)
-
 
     for i, batch in enumerate(test_dataloader):
         if i > 10:
