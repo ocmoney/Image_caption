@@ -12,15 +12,6 @@ class PositionalEncoding(nn.Module):
         positions = torch.arange(0, x.shape[1], device=x.device)
         return self.embedding(positions) + x
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, embedding_dim, max_len=10):
-        super().__init__()
-        self.embedding = nn.Embedding(max_len, embedding_dim)
-
-    def forward(self, x):
-        positions = torch.arange(0, x.shape[1], device=x.device)
-        return self.embedding(positions) + x
-
 class AttentionHead(nn.Module):
     def __init__(self, x_dim, y_dim, head_dim):
         super().__init__()

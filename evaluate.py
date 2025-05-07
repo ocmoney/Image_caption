@@ -19,7 +19,7 @@ def temperature_sampling(logits, temperature=1.0, top_k=20):
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    run_name = "valiant-leaf-47"
+    run_name = "dark-water-49"
     epoch = 10
     max_length = 24
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
         for j in range(max_length):
             output = model(image, text_token, mask)
-            output = temperature_sampling(output[0, -max_length-j], temperature=1.0, top_k=20)
+            output = temperature_sampling(output[0, -max_length-j], temperature=0.7, top_k=20)
             text[j] = output.item()
             text_token, mask = create_inputs(text, tokenizer)
 
