@@ -25,9 +25,9 @@ if __name__ == "__main__":
     torch.manual_seed(42)
 
     num_epochs = 10
-    num_heads = 6
-    num_layers = 8
-    learning_rate = 1e-5
+    num_heads = 4
+    num_layers = 3
+    learning_rate = 1e-4
     batch_size = 64
     img_seq_len = 197
     text_seq_len = 24
@@ -37,8 +37,8 @@ if __name__ == "__main__":
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=4, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=4, shuffle=False)
 
-    model = CaptionGenerator(num_heads=num_heads, num_layers=num_layers, device=device)
-    criterion = nn.CrossEntropyLoss(ignore_index=0)
+    model = CaptionGenerator(num_heads=num_heads, num_layers=num_layers, tokenizer=dataset.tokenizer, device=device)
+    criterion = nn.CrossEntropyLoss(ignore_index=dataset.tokenizer.pad_token_id)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     wandb.init(project="captioner", config={

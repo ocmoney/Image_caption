@@ -12,7 +12,7 @@ to_tensor = transforms.ToTensor()
 class ImageTextDataset(Dataset):
     def __init__(self, split="test"):
         self.dataset = load_dataset("nlphuji/flickr30k", split="test").train_test_split(test_size=0.1, seed=42)[split]
-        self.tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", use_fast=True)
+        self.tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", use_fast=True, special_tokens={"sep_token": "<sep>"})
         self.processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k", use_fast=True)
 
     def __len__(self):

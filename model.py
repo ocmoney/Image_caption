@@ -2,6 +2,15 @@ import torch
 import torch.nn as nn
 from transformers import AutoModel, ViTModel
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, embedding_dim, max_len=10):
+        super().__init__()
+        self.embedding = nn.Embedding(max_len, embedding_dim)
+
+    def forward(self, x):
+        positions = torch.arange(0, x.shape[1], device=x.device)
+        return self.embedding(positions) + x
+
 class AttentionHead(nn.Module):
     def __init__(self, x_dim, y_dim, head_dim):
         super().__init__()
@@ -71,25 +80,23 @@ class TransformerDecoder(nn.Module):
         return x
     
 class CaptionGenerator(nn.Module):
-    def __init__(self, num_heads, num_layers, img_seq_len=197, text_seq_len=24, device="cpu"):
+    def __init__(self, num_heads, num_layers, tokenizer, img_seq_len=197, text_seq_len=24, device="cpu"):
         super().__init__()
         text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased")
+        text_model.resize_token_embeddings(len(tokenizer))
+        self.tokenizer = tokenizer
         self.text_embedding = text_model.get_input_embeddings()
+        self.positional_encoding = PositionalEncoding(self.text_embedding.embedding_dim, img_seq_len + text_seq_len + 1)
         self.image_tokenizer = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k").to(device)
         self.embedding_dim = self.text_embedding.embedding_dim
         self.vocab_size = self.text_embedding.num_embeddings
         self.device = device
-        for param in self.text_embedding.parameters():
-            param.requires_grad = False
         for param in self.image_tokenizer.parameters():
             param.requires_grad = False
 
-        # Create a separator token to split the image and text tokens
-        self.sep_embedding = nn.Embedding(1, self.embedding_dim)
-
         # Create a base mask to prevent the decoder from attending to future tokens
         self.base_mask = torch.tril(torch.ones(img_seq_len + text_seq_len + 1, img_seq_len + text_seq_len + 1, device=self.device), diagonal=0)
-        # self.base_mask[:img_seq_len + 1, :] = 0 # Prevent the decoder from attending to the image tokens
+        #self.base_mask[:img_seq_len + 1, :] = 0 # Prevent the decoder from attending to the image tokens
 
         self.decoder = TransformerDecoder(self.embedding_dim, num_heads, num_layers)
         self.output_layer = nn.Linear(self.embedding_dim, self.vocab_size)
@@ -107,8 +114,9 @@ class CaptionGenerator(nn.Module):
     def preprocess(self, image, text_token):
         text_token = self.text_embedding(text_token)
         image_token = self.image_tokenizer(pixel_values=image, output_hidden_states=True).last_hidden_state
-        sep_token = self.sep_embedding(torch.tensor([[0]], dtype=torch.long, device=self.device)).expand(text_token.shape[0], -1, -1)
+        sep_token = self.text_embedding(torch.tensor([[self.tokenizer.sep_token_id]], dtype=torch.long, device=self.device)).expand(text_token.shape[0], -1, -1)
         tokens = torch.cat([image_token, sep_token, text_token], dim=1)
+        #tokens = self.positional_encoding(tokens)
         return tokens
 
     def forward(self, image, text_token, text_mask):
