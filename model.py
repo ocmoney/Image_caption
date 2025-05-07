@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from transformers import AutoModel, CLIPVisionModel, AutoTokenizer
 from torchtune.modules import RotaryPositionalEmbeddings
-
+from dataset import get_tokenizer
 class PositionalEncoding(nn.Module):
     def __init__(self, embedding_dim, max_len=10):
         super().__init__()
@@ -143,7 +143,7 @@ class CaptionGenerator(nn.Module):
     def preprocess(self, image, text_token):
         text_token = self.text_embedding(text_token)
         image_token = self.image_tokenizer(pixel_values=image, output_hidden_states=True).last_hidden_state
-        sep_token = self.text_embedding(torch.tensor([[self.tokenizer.sep_token_id]], dtype=torch.long, device=self.device)).expand(text_token.shape[0], -1, -1)
+        sep_token = self.text_embedding(torch.tensor([[self.tokenizer.image_end_token_id]], dtype=torch.long, device=self.device)).expand(text_token.shape[0], -1, -1)
         tokens = torch.cat([image_token, sep_token, text_token], dim=1)
         return tokens
 
@@ -154,7 +154,7 @@ class CaptionGenerator(nn.Module):
         return self.output_layer(tokens)
     
 if __name__ == "__main__":
-    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", use_fast=True, special_tokens={"sep_token": "<sep>"})
+    tokenizer = get_tokenizer()
     caption_generator = CaptionGenerator(num_heads=4, num_layers=3, tokenizer=tokenizer, img_seq_len=10, text_seq_len=10)
     text_mask = torch.ones(1, 10, dtype=torch.bool)
     text_mask[0, :3] = False

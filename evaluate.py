@@ -19,23 +19,23 @@ def temperature_sampling(logits, temperature=1.0, top_k=20):
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    run_name = "dark-water-49"
+    run_name = "cosmic-yogurt-52"
     epoch = 10
     max_length = 24
 
-    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", use_fast=True)
-    model = CaptionGenerator(num_heads=4, num_layers=3, tokenizer=tokenizer)
-    model.load_state_dict(load_file(f"model/{run_name}/transformer_{epoch-1}.safetensors"))
-    model.eval()
-
     test_dataset = ImageTextDataset(split="test")
     test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+    tokenizer = test_dataset.tokenizer
+
+    model = CaptionGenerator(num_heads=6, num_layers=8, tokenizer=tokenizer)
+    model.load_state_dict(load_file(f"model/{run_name}/transformer_{epoch-1}.safetensors"))
+    model.eval()
 
     for i, batch in enumerate(test_dataloader):
         if i > 10:
             break
 
-        image, _, _, _ = batch
+        image, input_tokens, output_tokens, real_mask = batch
         pil_image = test_dataset.get_image(i)
         pil_image.save(f"images/{i}.jpg")
 
@@ -51,4 +51,11 @@ if __name__ == "__main__":
             if output == tokenizer.sep_token_id:
                 break
 
-        print(f"{i}: {tokenizer.decode(text)}")
+        print(f"Prediction {i}:\n{tokenizer.decode(text)}")
+
+        output = model(image, input_tokens, real_mask)
+        output = torch.argmax(output, dim=-1)
+        output = tokenizer.decode(output.squeeze().tolist())
+        print(f"Force feeding prediction {i}:\n{output}")
+        print(f"Ground truth {i}:\n{tokenizer.decode(output_tokens.squeeze().tolist())}")
+        print()

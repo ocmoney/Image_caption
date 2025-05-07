@@ -10,14 +10,18 @@ import os
 from safetensors.torch import save_file
     
 
-def compute_accuracy(output, target):
+def compute_accuracy(output, target, pad_token_id):
     output = output.argmax(dim=2)
-    mask = target != 0
+    mask = target != pad_token_id
     output = output[mask]
     target = target[mask]
     correct_predictions = (output == target).sum().item()
     total_relevant_elements = target.numel()
     return correct_predictions / total_relevant_elements
+
+a = torch.tensor([[0, 1, 2]])
+b = torch.tensor([[[0, 1, 1], [0, 1, 1], [0, 1, 1]]])
+print(compute_accuracy(b, a, 19))
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,8 +29,8 @@ if __name__ == "__main__":
     torch.manual_seed(42)
 
     num_epochs = 10
-    num_heads = 4
-    num_layers = 3
+    num_heads = 6
+    num_layers = 8
     learning_rate = 1e-4
     batch_size = 64
     img_seq_len = 50
@@ -80,7 +84,7 @@ if __name__ == "__main__":
                 test_mask = test_mask.to(device)
                 test_output = model(test_image_token, test_input_text, test_mask)[:, -text_seq_len:, :] # only consider the generated text
                 test_loss = criterion(test_output.transpose(1, 2), test_output_text)
-                test_accuracy = compute_accuracy(test_output, test_output_text)
+                test_accuracy = compute_accuracy(test_output, test_output_text, dataset.tokenizer.pad_token_id)
                 
             epoch_loss.append(loss.item())
             epoch_test_loss.append(test_loss.item())
@@ -95,6 +99,9 @@ if __name__ == "__main__":
             
             if i != 0 and i % interval == 0:
                 print(f"\r[Epoch {epoch+1}/{num_epochs}], [Step {i+1}/{len(dataloader)}], Train Loss: {torch.tensor(epoch_loss[-interval:]).mean().item():.4f}, Test Loss: {torch.tensor(epoch_test_loss[-interval:]).mean().item():.4f}, Test Accuracy: {torch.tensor(epoch_test_accuracy[-interval:]).mean().item():.4f}")
+                for j in range(3):
+                    print("Random sentence:", dataset.tokenizer.decode(torch.argmax(test_output[j], dim=-1).squeeze().tolist()))
+                    print("Ground truth:", dataset.tokenizer.decode(test_output_text[j].squeeze().tolist()))         
             
         print(f"\n[Epoch {epoch+1}/{num_epochs}], Train Loss: {torch.tensor(epoch_loss).mean().item():.4f}, Test Loss: {torch.tensor(epoch_test_loss).mean().item():.4f}, Test Accuracy: {torch.tensor(epoch_test_accuracy).mean().item():.4f}")
         model_path = f"model/{wandb.run.name}/transformer_{epoch}.safetensors"
