@@ -14,32 +14,6 @@ class Flickr30k(torch.utils.data.Dataset):
         self.vit_model = transformers.ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
         self.tokenizer = transformers.AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         self.bert_model = transformers.BertModel.from_pretrained("google-bert/bert-base-uncased")
-        
-        # Pre-compute image embeddings in batches of 64
-        print("Pre-computing image embeddings...")
-        self.image_embeddings = {}
-        batch_size = 64
-        
-        # Process images in batches
-        for i in range(0, len(self.split), batch_size):
-            # Get batch of images
-            batch_end = min(i + batch_size, len(self.split))
-            image_batch = [self.split[j]["image"] for j in range(i, batch_end)]
-            
-            # Process batch
-            inputs = self.image_processor(image_batch, return_tensors="pt")
-            with torch.no_grad():
-                outputs = self.vit_model(**inputs)
-            
-            # Store embeddings
-            for j, embedding in enumerate(outputs.last_hidden_state):
-                self.image_embeddings[i + j] = embedding
-            
-            # Clear GPU cache after each batch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            
-            print(f"Processed images {i} to {batch_end-1}")
 
     def __len__(self):
         return 5 * len(self.split)
@@ -49,8 +23,12 @@ class Flickr30k(torch.utils.data.Dataset):
         image_idx = idx // 5  # Which image (0 to len(self.split)-1)
         caption_idx = idx % 5  # Which caption (0 to 4)
         
-        # Get pre-computed image embedding
-        image_embedding = self.image_embeddings[image_idx]
+        # Get image and process it
+        image = self.split[image_idx]["image"]
+        inputs = self.image_processor([image], return_tensors="pt")
+        with torch.no_grad():
+            outputs = self.vit_model(**inputs)
+        image_embedding = outputs.last_hidden_state[0]  # Remove batch dimension
         
         # Get and process caption
         caption = self.split[image_idx]["caption"][caption_idx]
