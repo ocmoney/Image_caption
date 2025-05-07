@@ -19,13 +19,13 @@ def get_last_uploaded_chunk():
         print(f"Error checking existing chunks: {e}")
         return 0
 
-def upload_sequences_to_wandb(split="train", chunk_size=200):
+def upload_sequences_to_wandb(split="train", chunk_size=320):  # 320 = 64 * 5
     """
     Upload sequences to wandb in chunks using artifacts
     
     Args:
         split (str): Dataset split to use ("train", "test", etc.)
-        chunk_size (int): Number of examples to process in each chunk
+        chunk_size (int): Number of examples to process in each chunk (should be divisible by batch_size)
     """
     # Initialize wandb
     print("Initializing wandb...")

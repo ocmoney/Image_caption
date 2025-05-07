@@ -77,99 +77,102 @@ def load_processed_dataset():
     wandb.init(project="image-caption", name="decoder-training")
     
     try:
-        # Get specific chunk artifact
+        # Get chunk artifacts
         api = wandb.Api()
-        artifact = api.artifact("olliecumming3-machine-learning-institute/image-caption/flickr30k_sequences_chunk_46:latest")
         
-        print(f"Found chunk artifact: {artifact.name}")
+        # List of chunks to try loading
+        train_chunks = [1,2,3,4,5,6,7,8,9,10]  # Training chunks
+        test_chunk = 46  # Test chunk
         
-        # Create a temporary directory
+        print("Loading chunks from wandb...")
+        
+        # Create a single temporary directory
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Download the artifact
-            artifact_dir = artifact.download(root=tmp_dir)
-            print(f"Downloaded {artifact.name} to: {artifact_dir}")
+            # Download all artifacts at once
+            artifacts = {}
+            for chunk_num in train_chunks + [test_chunk]:
+                try:
+                    artifact = api.artifact(f"olliecumming3-machine-learning-institute/image-caption/flickr30k_sequences_chunk_{chunk_num}:latest")
+                    artifact_dir = artifact.download(root=tmp_dir)
+                    artifacts[chunk_num] = artifact_dir
+                    print(f"Downloaded chunk {chunk_num}")
+                except Exception as e:
+                    print(f"Could not download chunk {chunk_num}: {e}")
+                    if chunk_num == test_chunk:
+                        raise
             
-            # Load the chunk file
-            chunk_file = os.path.join(artifact_dir, "sequences_chunk_46.pt")
-            all_sequences = torch.load(chunk_file)
-            print(f"\nInitial loaded data type: {type(all_sequences)}")
-            if isinstance(all_sequences, list):
-                print(f"Number of sequences in list: {len(all_sequences)}")
-                print(f"First sequence shape: {all_sequences[0].shape}")
+            # Load all chunks in parallel
+            train_sequences = []
+            test_sequences = []
             
-            # Convert to tensor and ensure correct shape [batch_size, sequence_length, embedding_dim]
-            all_sequences = torch.stack(all_sequences)  # [num_examples, seq_len, 768]
-            print(f"\nAfter stack - all_sequences shape: {all_sequences.shape}")
+            # Load test chunk
+            test_file = os.path.join(artifacts[test_chunk], f"sequences_chunk_{test_chunk}.pt")
+            test_sequences = torch.load(test_file)
+            print(f"Loaded test chunk {test_chunk}")
             
-            # If we have an extra dimension, squeeze it out
-            if len(all_sequences.shape) == 4:  # [batch_size, 1, seq_len, embedding_dim]
-                print(f"\nRemoving extra dimension - before: {all_sequences.shape}")
-                all_sequences = all_sequences.squeeze(1)  # Remove the extra dimension
-                print(f"After squeeze - all_sequences shape: {all_sequences.shape}")
+            # Load training chunks
+            for chunk_num in train_chunks:
+                if chunk_num in artifacts:
+                    chunk_file = os.path.join(artifacts[chunk_num], f"sequences_chunk_{chunk_num}.pt")
+                    chunk_sequences = torch.load(chunk_file)
+                    train_sequences.extend(chunk_sequences)
+                    print(f"Loaded training chunk {chunk_num}")
             
-            # If dimensions are swapped, transpose them
-            if all_sequences.size(1) == 768:  # If sequence length and embedding dim are swapped
-                print(f"\nBefore permute - all_sequences shape: {all_sequences.shape}")
-                all_sequences = all_sequences.permute(0, 2, 1)  # Swap dimensions to [batch_size, seq_len, 768]
-                print(f"After permute - all_sequences shape: {all_sequences.shape}")
+            if not train_sequences:
+                raise ValueError("Could not load any training data")
             
-            # Reshape to match config batch size
-            batch_size = config.batch_size
-            num_examples = all_sequences.size(0)
-            seq_len = all_sequences.size(1)
-            embedding_dim = all_sequences.size(2)
+            print(f"\nTotal sequences loaded:")
+            print(f"Training: {len(train_sequences)} examples")
+            print(f"Testing: {len(test_sequences)} examples")
             
-            # Calculate how many complete batches we can make
-            num_complete_batches = num_examples // batch_size
-            if num_complete_batches == 0:
-                raise ValueError(f"Not enough examples ({num_examples}) for batch size {batch_size}")
+            # Process training data
+            train_sequences = torch.stack(train_sequences)
+            if len(train_sequences.shape) == 4:
+                train_sequences = train_sequences.squeeze(1)
+            if train_sequences.size(1) == 768:
+                train_sequences = train_sequences.permute(0, 2, 1)
             
-            # Take only complete batches
-            all_sequences = all_sequences[:num_complete_batches * batch_size]
-            all_sequences = all_sequences.view(num_complete_batches, batch_size, seq_len, embedding_dim)
+            # Process test data
+            test_sequences = torch.stack(test_sequences)
+            if len(test_sequences.shape) == 4:
+                test_sequences = test_sequences.squeeze(1)
+            if test_sequences.size(1) == 768:
+                test_sequences = test_sequences.permute(0, 2, 1)
             
-            print(f"\nAfter reshaping to batches:")
-            print(f"Number of complete batches: {num_complete_batches}")
-            print(f"Batch size: {batch_size}")
-            print(f"Sequence length: {seq_len}")
-            print(f"Embedding dimension: {embedding_dim}")
-            print(f"Final shape: {all_sequences.shape}")
+            # Use batch size of 64
+            batch_size = 64
             
-            # Split sequence into image patches and caption
-            # First 196 tokens are image patches (14x14 grid)
-            image_patches = all_sequences[:, :, :196, :]  # [num_batches, batch_size, 196, 768]
-            caption_embeddings = all_sequences[:, :, 196:, :]  # [num_batches, batch_size, caption_len, 768]
+            # Process training data
+            train_examples = train_sequences.size(0)
+            train_batches = train_examples // batch_size
+            if train_batches == 0:
+                raise ValueError(f"Not enough training examples ({train_examples}) for batch size {batch_size}")
+            train_sequences = train_sequences[:train_batches * batch_size]
+            train_sequences = train_sequences.view(train_batches, batch_size, train_sequences.size(1), train_sequences.size(2))
             
-            # Get shapes
-            caption_len = caption_embeddings.size(2)
+            # Process test data
+            test_examples = test_sequences.size(0)
+            test_batches = test_examples // batch_size
+            if test_batches == 0:
+                raise ValueError(f"Not enough test examples ({test_examples}) for batch size {batch_size}")
+            test_sequences = test_sequences[:test_batches * batch_size]
+            test_sequences = test_sequences.view(test_batches, batch_size, test_sequences.size(1), test_sequences.size(2))
             
-            print(f"\nShape information:")
-            print(f"Number of batches: {num_complete_batches}")
-            print(f"Caption length: {caption_len}")
-            print(f"Image patches shape: {image_patches.shape}")
-            print(f"Caption embeddings shape: {caption_embeddings.shape}")
-            
-            # Create decoder inputs by concatenating image patches and caption
-            decoder_inputs = all_sequences  # [num_batches, batch_size, seq_len, 768]
-            
-            # Create input_ids and labels for captions
-            # These will be generated during training from the caption embeddings
-            caption_input_ids = torch.zeros((num_complete_batches, batch_size, caption_len), dtype=torch.long)
-            caption_labels = torch.zeros((num_complete_batches, batch_size, caption_len), dtype=torch.long)
+            # Get sequence dimensions
+            seq_len = train_sequences.size(2)
+            embedding_dim = train_sequences.size(3)
+            caption_len = seq_len - 196  # 196 is the number of image patches
             
             # Create the format expected by the training code
             processed_data = {
-                'decoder_inputs': decoder_inputs,  # [num_batches, batch_size, seq_len, 768]
-                'caption_input_ids': caption_input_ids,  # [num_batches, batch_size, caption_len]
-                'caption_labels': caption_labels  # [num_batches, batch_size, caption_len]
+                'decoder_inputs': torch.cat([train_sequences, test_sequences], dim=0),  # Combine for initial processing
+                'caption_input_ids': torch.zeros((train_batches + test_batches, batch_size, caption_len), dtype=torch.long),
+                'caption_labels': torch.zeros((train_batches + test_batches, batch_size, caption_len), dtype=torch.long)
             }
             
-            print("\nFinal processed data shapes:")
-            for k, v in processed_data.items():
-                print(f"{k}: {v.shape}")
-            
             print("\nSuccessfully loaded processed dataset from wandb!")
-            print(f"Dataset size: {num_complete_batches * batch_size} examples")
+            print(f"Training: {train_batches} batches ({train_batches * batch_size} examples)")
+            print(f"Testing: {test_batches} batches ({test_batches * batch_size} examples)")
             return processed_data
             
     except Exception as e:
@@ -191,11 +194,6 @@ def train_decoder(processed_data, config=config):
     
     # Start timing
     start_time = time.time()
-    
-    # Print tensor shapes for debugging
-    print("\nInput tensor shapes:")
-    for k, v in processed_data.items():
-        print(f"{k}: {v.shape}")
     
     # Get number of batches and calculate train/test split
     num_batches = processed_data['decoder_inputs'].size(0)
@@ -227,14 +225,6 @@ def train_decoder(processed_data, config=config):
     print(f"\nSplit data into:")
     print(f"- Training: {train_batches} batches ({train_batches * config.batch_size} examples)")
     print(f"- Testing: {num_batches - train_batches} batches ({(num_batches - train_batches) * config.batch_size} examples)")
-    
-    # Print tensor shapes after splitting
-    print("\nTrain data tensor shapes:")
-    for k, v in train_data.items():
-        print(f"{k}: {v.shape}")
-    print("\nTest data tensor shapes:")
-    for k, v in test_data.items():
-        print(f"{k}: {v.shape}")
     
     # Initialize model and move to device
     model = TransformerDecoder(
@@ -279,12 +269,6 @@ def train_decoder(processed_data, config=config):
             
             # Reshape outputs and labels for loss calculation
             caption_outputs = caption_outputs.permute(1, 0, 2)  # [batch_size, 25, vocab_size]
-            
-            # Debug prints for first batch
-            if batch_idx == 0:
-                print(f"\nTraining batch shapes:")
-                print(f"caption_outputs: {caption_outputs.shape}")
-                print(f"caption_labels: {caption_labels.shape}")
             
             # Convert labels to long type for GPU
             if config.device == 'cuda':
@@ -347,12 +331,6 @@ def train_decoder(processed_data, config=config):
                 
                 # Reshape outputs and labels
                 caption_outputs = caption_outputs.permute(1, 0, 2)
-                
-                # Debug prints for first batch
-                if batch_idx == 0:
-                    print(f"\nTest batch shapes:")
-                    print(f"caption_outputs: {caption_outputs.shape}")
-                    print(f"caption_labels: {caption_labels.shape}")
                 
                 # Convert labels to long type for GPU
                 if config.device == 'cuda':
