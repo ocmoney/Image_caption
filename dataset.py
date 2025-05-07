@@ -1,11 +1,8 @@
 from datasets import load_dataset
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer, AutoImageProcessor, ViTModel, AutoModel
+from transformers import AutoTokenizer, AutoImageProcessor
 import torch
-from PIL import Image
 from torchvision import transforms
-import torch.nn as nn
-import numpy as np
 
 to_tensor = transforms.ToTensor()
 

@@ -51,4 +51,4 @@ if __name__ == "__main__":
             if output == tokenizer.sep_token_id:
                 break
 
-        print(tokenizer.decode(text))
+        print(f"{i}: {tokenizer.decode(text)}")
