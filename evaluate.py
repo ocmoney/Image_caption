@@ -19,7 +19,7 @@ def temperature_sampling(logits, temperature=1.0, top_k=20):
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    run_name = "golden-silence-46"
+    run_name = "valiant-leaf-47"
     epoch = 10
     max_length = 24
 

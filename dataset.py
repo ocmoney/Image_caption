@@ -25,7 +25,7 @@ class ImageTextDataset(Dataset):
         inputs = self.tokenizer(text, return_tensors="pt", padding='max_length', truncation=True, max_length=24)
         text_token = inputs["input_ids"][0]
         output_text_token = torch.cat([text_token, torch.tensor([self.tokenizer.pad_token_id], dtype=torch.long)])[1:]
-        mask = text_token == 0
+        mask = text_token == self.tokenizer.pad_token_id
         return image, text_token, output_text_token, mask
     
     def get_image(self, idx):

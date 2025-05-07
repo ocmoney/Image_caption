@@ -1,6 +1,16 @@
 import torch
 import torch.nn as nn
 from transformers import AutoModel, ViTModel, AutoTokenizer
+from torchtune.modules import RotaryPositionalEmbeddings
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, embedding_dim, max_len=10):
+        super().__init__()
+        self.embedding = nn.Embedding(max_len, embedding_dim)
+
+    def forward(self, x):
+        positions = torch.arange(0, x.shape[1], device=x.device)
+        return self.embedding(positions) + x
 
 class PositionalEncoding(nn.Module):
     def __init__(self, embedding_dim, max_len=10):
@@ -44,13 +54,42 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x, y, mask):
         return torch.cat([head(x, y, mask) for head in self.heads], dim=-1)
+    
+class MultiHeadAttentionWithROPE(nn.Module):
+    def __init__(self, x_dim, output_dim, num_heads):
+        super().__init__()
+        self.x_dim = x_dim
+        self.output_dim = output_dim
+        self.num_heads = num_heads
+        self.head_dim = output_dim // num_heads
+        self.rope = RotaryPositionalEmbeddings(self.head_dim, 222)
+        self.qkv_proj = nn.Linear(x_dim, output_dim * 3)
+
+    def forward(self, x, mask):
+        qkv = self.qkv_proj(x)
+        qkv = qkv.reshape(x.shape[0], x.shape[1], self.num_heads, 3*self.head_dim)
+        q, k, v = qkv.chunk(3, dim=-1)
+        q = self.rope(q)
+        k = self.rope(k)
+        q = q.permute(0, 2, 1, 3)
+        k = k.permute(0, 2, 1, 3)
+        v = v.permute(0, 2, 1, 3)
+
+        attn_logits = torch.matmul(q, k.transpose(-2, -1)) / torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32))
+        mask = mask.unsqueeze(1).expand(-1, self.num_heads, -1, -1)
+        attn_logits = attn_logits.masked_fill(torch.logical_not(mask.bool()), float('-inf'))
+        attn_weights = torch.softmax(attn_logits, dim=-1)
+        weighted_value = torch.matmul(attn_weights, v)
+        weighted_value = weighted_value.permute(0, 2, 1, 3)
+        weighted_value = weighted_value.reshape(x.shape[0], x.shape[1], self.output_dim)
+        return weighted_value
 
 class SelfAttentionBlock(nn.Module):
     def __init__(self, embedding_dim, num_heads):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
-        self.multi_head_attention = MultiHeadAttention(embedding_dim, embedding_dim, embedding_dim, num_heads)
+        self.multi_head_attention = MultiHeadAttentionWithROPE(embedding_dim, embedding_dim, num_heads)
         self.norm1 = nn.LayerNorm(embedding_dim)
         self.norm2 = nn.LayerNorm(embedding_dim)
         self.feed_forward = nn.Sequential(
@@ -60,7 +99,7 @@ class SelfAttentionBlock(nn.Module):
         )
 
     def forward(self, x, mask):
-        x_attn = self.multi_head_attention(x, x, mask)
+        x_attn = self.multi_head_attention(x, mask)
         x = self.norm1(x + x_attn)
         x_ff = self.feed_forward(x)
         x = self.norm2(x + x_ff)
