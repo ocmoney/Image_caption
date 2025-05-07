@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from transformers import AutoModel, ViTModel, AutoTokenizer
+from transformers import AutoModel, CLIPVisionModel, AutoTokenizer
 from torchtune.modules import RotaryPositionalEmbeddings
 
 class PositionalEncoding(nn.Module):
@@ -110,13 +110,13 @@ class TransformerDecoder(nn.Module):
         return x
     
 class CaptionGenerator(nn.Module):
-    def __init__(self, num_heads, num_layers, tokenizer, img_seq_len=197, text_seq_len=24, device="cpu"):
+    def __init__(self, num_heads, num_layers, tokenizer, img_seq_len=50, text_seq_len=24, device="cpu"):
         super().__init__()
         text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased")
         text_model.resize_token_embeddings(len(tokenizer))
         self.tokenizer = tokenizer
         self.text_embedding = text_model.get_input_embeddings()
-        self.image_tokenizer = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k").to(device)
+        self.image_tokenizer = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
         self.embedding_dim = self.text_embedding.embedding_dim
         self.vocab_size = self.text_embedding.num_embeddings
         self.device = device

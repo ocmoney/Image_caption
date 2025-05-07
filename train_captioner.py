@@ -29,7 +29,7 @@ if __name__ == "__main__":
     num_layers = 3
     learning_rate = 1e-4
     batch_size = 64
-    img_seq_len = 197
+    img_seq_len = 50
     text_seq_len = 24
     dataset = ImageTextDataset(split="train")
     test_dataset = ImageTextDataset(split="test")
