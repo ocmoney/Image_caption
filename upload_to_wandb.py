@@ -1,87 +1,97 @@
 import wandb
+from tqdm import tqdm
+from Liam_dataset import Flickr30k
+import time
 import torch
-from img_text_concat import process_dataset
-import tempfile
 import os
-import math
 
-def upload_dataset():
+def get_last_uploaded_chunk():
+    """Get the number of the last uploaded chunk"""
+    try:
+        api = wandb.Api()
+        artifacts = api.artifacts(name="image-caption/flickr30k_sequences_chunk_*", type_name="dataset")
+        if not artifacts:
+            return 0
+        # Get the highest chunk number
+        chunk_numbers = [int(art.name.split('_')[-1]) for art in artifacts]
+        return max(chunk_numbers)
+    except Exception as e:
+        print(f"Error checking existing chunks: {e}")
+        return 0
+
+def upload_sequences_to_wandb(split="train", chunk_size=200):
+    """
+    Upload sequences to wandb in chunks using artifacts
+    
+    Args:
+        split (str): Dataset split to use ("train", "test", etc.)
+        chunk_size (int): Number of examples to process in each chunk
+    """
     # Initialize wandb
-    wandb.init(project="flickr30k", job_type="dataset_upload")
+    print("Initializing wandb...")
+    run = wandb.init(project="image-caption", name="flickr30k-dataset")
     
-    # Process the dataset
-    processed_data = process_dataset()
+    # Create dataset
+    print("Creating dataset...")
+    dataset = Flickr30k(split=split)
+    total_examples = len(dataset)
+    print(f"Dataset size: {total_examples} examples")
     
-    # Create a temporary directory to save the tensors
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Store unique image embeddings
-        image_embeddings_dict = {}  # Map image index to embeddings
-        all_caption_embeddings = []
-        all_caption_input_ids = []
-        all_caption_labels = []
-        image_to_caption_map = []  # Map image index to caption indices
+    # Get the last uploaded chunk
+    last_chunk = get_last_uploaded_chunk()
+    print(f"Last uploaded chunk: {last_chunk}")
+    
+    # Create a folder for chunks
+    chunks_dir = "flickr30k_chunks"
+    os.makedirs(chunks_dir, exist_ok=True)
+    
+    # Process in chunks, starting from where we left off
+    for chunk_start in range(last_chunk * chunk_size, total_examples, chunk_size):
+        chunk_end = min(chunk_start + chunk_size, total_examples)
+        chunk_num = chunk_start // chunk_size + 1
+        print(f"\nProcessing examples {chunk_start} to {chunk_end}...")
         
-        for batch_idx, batch in enumerate(processed_data):
-            # Split the sequence into image and caption parts
-            decoder_inputs = batch['decoder_inputs']  # [seq_len, num_captions, d_model]
-            image_embeddings = decoder_inputs[:196, 0, :]  # Get image embeddings for first caption only
-            caption_embeddings = decoder_inputs[196:, :, :]  # Get all caption embeddings
-            
-            # Store image embeddings if not already stored
-            if batch_idx not in image_embeddings_dict:
-                image_embeddings_dict[batch_idx] = image_embeddings
-            
-            # Store caption data
-            all_caption_embeddings.append(caption_embeddings)
-            all_caption_input_ids.append(batch['caption_input_ids'])
-            all_caption_labels.append(batch['caption_labels'])
-            
-            # Map this image to its caption indices
-            start_idx = len(all_caption_embeddings) - caption_embeddings.size(1)
-            end_idx = len(all_caption_embeddings)
-            image_to_caption_map.append((start_idx, end_idx))
+        # Create a list to store sequences for this chunk
+        chunk_sequences = []
         
-        # Convert to tensors
-        final_image_embeddings = torch.stack([emb for emb in image_embeddings_dict.values()], dim=0)  # [num_images, 196, 768]
-        final_caption_embeddings = torch.cat(all_caption_embeddings, dim=1)  # [caption_len, total_captions, 768]
-        final_caption_input_ids = torch.cat(all_caption_input_ids, dim=0)  # [total_captions, max_len]
-        final_caption_labels = torch.cat(all_caption_labels, dim=0)  # [total_captions, max_len]
+        # Process current chunk
+        for idx in tqdm(range(chunk_start, chunk_end), desc=f"Processing chunk {chunk_num}"):
+            # Get sequence
+            sequence = dataset[idx]
+            chunk_sequences.append(sequence)
         
-        # Save the tensors
-        torch.save({
-            'image_embeddings': final_image_embeddings,  # [num_images, 196, 768]
-            'caption_embeddings': final_caption_embeddings,  # [caption_len, total_captions, 768]
-            'caption_input_ids': final_caption_input_ids,  # [total_captions, max_len]
-            'caption_labels': final_caption_labels,  # [total_captions, max_len]
-            'image_to_caption_map': image_to_caption_map  # List of (start_idx, end_idx) tuples
-        }, os.path.join(temp_dir, 'processed_dataset.pt'))
+        # Save chunk to file in the chunks directory
+        chunk_file = os.path.join(chunks_dir, f"sequences_chunk_{chunk_num}.pt")
+        torch.save(chunk_sequences, chunk_file)
         
-        # Create a new artifact with the same name to overwrite
+        # Calculate chunk size in MB
+        chunk_size_mb = sum(seq.element_size() * seq.nelement() for seq in chunk_sequences) / 1024 / 1024
+        
+        # Create a new artifact for this chunk
         artifact = wandb.Artifact(
-            name="processed_flickr30k",
+            name=f"flickr30k_sequences_chunk_{chunk_num}",
             type="dataset",
-            description="Processed Flickr30k dataset with image patches and caption embeddings"
+            description=f"Flickr30k image-text sequences chunk {chunk_num}"
         )
         
-        # Add the saved tensors to the artifact
-        artifact.add_file(os.path.join(temp_dir, 'processed_dataset.pt'))
+        # Add chunk to artifact
+        print(f"\nUploading chunk {chunk_num} to wandb...")
+        print(f"Chunk size: {chunk_size_mb:.2f} MB")
+        print("This may take several minutes...")
         
-        # Upload the artifact with overwrite=True
-        wandb.log_artifact(artifact, aliases=["latest"])
+        artifact.add_file(chunk_file)
+        run.log_artifact(artifact)
+        print(f"Chunk {chunk_num} uploaded successfully")
         
-        # Log dataset statistics
-        wandb.log({
-            "total_images": final_image_embeddings.size(0),
-            "total_captions": final_caption_embeddings.size(1),
-            "image_patches": final_image_embeddings.size(1),
-            "caption_length": final_caption_embeddings.size(0),
-            "embedding_dim": final_image_embeddings.size(2),
-            "max_caption_length": final_caption_input_ids.size(1),
-            "storage_size_mb": os.path.getsize(os.path.join(temp_dir, 'processed_dataset.pt')) / (1024 * 1024)
-        })
+        # Clean up local file
+        os.remove(chunk_file)
     
-    # Finish the run
-    wandb.finish()
+    # Clean up chunks directory
+    os.rmdir(chunks_dir)
+    
+    # Finish wandb run
+    run.finish()
+    print("Done!")
 
 if __name__ == "__main__":
-    upload_dataset() 
+    upload_sequences_to_wandb()

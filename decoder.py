@@ -74,49 +74,102 @@ class TransformerDecoder(nn.Module):
 
 def load_processed_dataset():
     # Initialize wandb
-    wandb.init(project="flickr30k", name="decoder-training")
+    wandb.init(project="image-caption", name="decoder-training")
     
     try:
-        # Try to download the artifact
-        artifact = wandb.use_artifact("processed_flickr30k:latest")
+        # Get specific chunk artifact
+        api = wandb.Api()
+        artifact = api.artifact("olliecumming3-machine-learning-institute/image-caption/flickr30k_sequences_chunk_46:latest")
+        
+        print(f"Found chunk artifact: {artifact.name}")
         
         # Create a temporary directory
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Download the artifact
             artifact_dir = artifact.download(root=tmp_dir)
-            print(f"Artifact downloaded to: {artifact_dir}")
+            print(f"Downloaded {artifact.name} to: {artifact_dir}")
             
-            # Load the tensors
-            data = torch.load(os.path.join(artifact_dir, 'processed_dataset.pt'))
+            # Load the chunk file
+            chunk_file = os.path.join(artifact_dir, "sequences_chunk_46.pt")
+            all_sequences = torch.load(chunk_file)
+            print(f"\nInitial loaded data type: {type(all_sequences)}")
+            if isinstance(all_sequences, list):
+                print(f"Number of sequences in list: {len(all_sequences)}")
+                print(f"First sequence shape: {all_sequences[0].shape}")
+            
+            # Convert to tensor and ensure correct shape [batch_size, sequence_length, embedding_dim]
+            all_sequences = torch.stack(all_sequences)  # [num_examples, seq_len, 768]
+            print(f"\nAfter stack - all_sequences shape: {all_sequences.shape}")
+            
+            # If we have an extra dimension, squeeze it out
+            if len(all_sequences.shape) == 4:  # [batch_size, 1, seq_len, embedding_dim]
+                print(f"\nRemoving extra dimension - before: {all_sequences.shape}")
+                all_sequences = all_sequences.squeeze(1)  # Remove the extra dimension
+                print(f"After squeeze - all_sequences shape: {all_sequences.shape}")
+            
+            # If dimensions are swapped, transpose them
+            if all_sequences.size(1) == 768:  # If sequence length and embedding dim are swapped
+                print(f"\nBefore permute - all_sequences shape: {all_sequences.shape}")
+                all_sequences = all_sequences.permute(0, 2, 1)  # Swap dimensions to [batch_size, seq_len, 768]
+                print(f"After permute - all_sequences shape: {all_sequences.shape}")
+            
+            # Reshape to match config batch size
+            batch_size = config.batch_size
+            num_examples = all_sequences.size(0)
+            seq_len = all_sequences.size(1)
+            embedding_dim = all_sequences.size(2)
+            
+            # Calculate how many complete batches we can make
+            num_complete_batches = num_examples // batch_size
+            if num_complete_batches == 0:
+                raise ValueError(f"Not enough examples ({num_examples}) for batch size {batch_size}")
+            
+            # Take only complete batches
+            all_sequences = all_sequences[:num_complete_batches * batch_size]
+            all_sequences = all_sequences.view(num_complete_batches, batch_size, seq_len, embedding_dim)
+            
+            print(f"\nAfter reshaping to batches:")
+            print(f"Number of complete batches: {num_complete_batches}")
+            print(f"Batch size: {batch_size}")
+            print(f"Sequence length: {seq_len}")
+            print(f"Embedding dimension: {embedding_dim}")
+            print(f"Final shape: {all_sequences.shape}")
+            
+            # Split sequence into image patches and caption
+            # First 196 tokens are image patches (14x14 grid)
+            image_patches = all_sequences[:, :, :196, :]  # [num_batches, batch_size, 196, 768]
+            caption_embeddings = all_sequences[:, :, 196:, :]  # [num_batches, batch_size, caption_len, 768]
             
             # Get shapes
-            num_images = data['image_embeddings'].size(0)  # [num_images, 196, 768]
-            total_captions = data['caption_embeddings'].size(1)  # [caption_len, total_captions, 768]
+            caption_len = caption_embeddings.size(2)
             
-            # Create decoder inputs by expanding image embeddings for each caption
-            decoder_inputs = []
-            for img_idx, (start_idx, end_idx) in enumerate(data['image_to_caption_map']):
-                # Get image embeddings for this image
-                img_emb = data['image_embeddings'][img_idx]  # [196, 768]
-                # Get caption embeddings for this image's captions
-                cap_emb = data['caption_embeddings'][:, start_idx:end_idx, :]  # [caption_len, num_captions, 768]
-                # Expand image embeddings for each caption
-                img_emb_expanded = img_emb.unsqueeze(1).expand(-1, end_idx - start_idx, -1)  # [196, num_captions, 768]
-                # Concatenate along sequence dimension
-                decoder_inputs.append(torch.cat([img_emb_expanded, cap_emb], dim=0))  # [seq_len, num_captions, 768]
+            print(f"\nShape information:")
+            print(f"Number of batches: {num_complete_batches}")
+            print(f"Caption length: {caption_len}")
+            print(f"Image patches shape: {image_patches.shape}")
+            print(f"Caption embeddings shape: {caption_embeddings.shape}")
             
-            # Concatenate all decoder inputs
-            decoder_inputs = torch.cat(decoder_inputs, dim=1)  # [seq_len, total_captions, 768]
+            # Create decoder inputs by concatenating image patches and caption
+            decoder_inputs = all_sequences  # [num_batches, batch_size, seq_len, 768]
+            
+            # Create input_ids and labels for captions
+            # These will be generated during training from the caption embeddings
+            caption_input_ids = torch.zeros((num_complete_batches, batch_size, caption_len), dtype=torch.long)
+            caption_labels = torch.zeros((num_complete_batches, batch_size, caption_len), dtype=torch.long)
             
             # Create the format expected by the training code
             processed_data = {
-                'decoder_inputs': decoder_inputs,
-                'caption_input_ids': data['caption_input_ids'],
-                'caption_labels': data['caption_labels']
+                'decoder_inputs': decoder_inputs,  # [num_batches, batch_size, seq_len, 768]
+                'caption_input_ids': caption_input_ids,  # [num_batches, batch_size, caption_len]
+                'caption_labels': caption_labels  # [num_batches, batch_size, caption_len]
             }
             
-            print("Successfully loaded processed dataset from wandb!")
-            print(f"Dataset size: {processed_data['decoder_inputs'].size(1)} examples")
+            print("\nFinal processed data shapes:")
+            for k, v in processed_data.items():
+                print(f"{k}: {v.shape}")
+            
+            print("\nSuccessfully loaded processed dataset from wandb!")
+            print(f"Dataset size: {num_complete_batches * batch_size} examples")
             return processed_data
             
     except Exception as e:
@@ -139,49 +192,49 @@ def train_decoder(processed_data, config=config):
     # Start timing
     start_time = time.time()
     
-    # Calculate total examples and split size
-    total_examples = processed_data['decoder_inputs'].size(1)
-    train_size = int(config.train_fraction * total_examples)
+    # Print tensor shapes for debugging
+    print("\nInput tensor shapes:")
+    for k, v in processed_data.items():
+        print(f"{k}: {v.shape}")
     
-    print(f"\nSplitting {total_examples} examples into train/test sets...")
+    # Get number of batches and calculate train/test split
+    num_batches = processed_data['decoder_inputs'].size(0)
+    train_batches = int(config.train_fraction * num_batches)
+    
+    print(f"\nSplitting {num_batches} batches into train/test sets...")
     
     # Move all input data to GPU at once
     print("Moving input data to GPU...")
     processed_data = {k: v.to(config.device, non_blocking=True) for k, v in processed_data.items()}
     
-    # Split the data with progress bar
+    # Split the data into train and test sets
     train_data = {
-        'decoder_inputs': torch.zeros((processed_data['decoder_inputs'].size(0), train_size, processed_data['decoder_inputs'].size(2)), device=config.device),
-        'caption_input_ids': torch.zeros((train_size, processed_data['caption_input_ids'].size(1)), device=config.device),
-        'caption_labels': torch.zeros((train_size, processed_data['caption_labels'].size(1)), device=config.device)
+        'decoder_inputs': processed_data['decoder_inputs'][:train_batches],
+        'caption_input_ids': processed_data['caption_input_ids'][:train_batches],
+        'caption_labels': processed_data['caption_labels'][:train_batches]
     }
     
     test_data = {
-        'decoder_inputs': torch.zeros((processed_data['decoder_inputs'].size(0), total_examples - train_size, processed_data['decoder_inputs'].size(2)), device=config.device),
-        'caption_input_ids': torch.zeros((total_examples - train_size, processed_data['caption_input_ids'].size(1)), device=config.device),
-        'caption_labels': torch.zeros((total_examples - train_size, processed_data['caption_labels'].size(1)), device=config.device)
+        'decoder_inputs': processed_data['decoder_inputs'][train_batches:],
+        'caption_input_ids': processed_data['caption_input_ids'][train_batches:],
+        'caption_labels': processed_data['caption_labels'][train_batches:]
     }
-    
-    # Copy data with progress bar
-    print("\nLoading data to GPU...")
-    for i in tqdm(range(total_examples), desc="Splitting data"):
-        if i < train_size:
-            train_data['decoder_inputs'][:, i, :] = processed_data['decoder_inputs'][:, i, :]
-            train_data['caption_input_ids'][i, :] = processed_data['caption_input_ids'][i, :]
-            train_data['caption_labels'][i, :] = processed_data['caption_labels'][i, :]
-        else:
-            test_idx = i - train_size
-            test_data['decoder_inputs'][:, test_idx, :] = processed_data['decoder_inputs'][:, i, :]
-            test_data['caption_input_ids'][test_idx, :] = processed_data['caption_input_ids'][i, :]
-            test_data['caption_labels'][test_idx, :] = processed_data['caption_labels'][i, :]
     
     # Clear original data from GPU
     del processed_data
     torch.cuda.empty_cache()
     
     print(f"\nSplit data into:")
-    print(f"- Training: {train_size} examples")
-    print(f"- Testing: {total_examples - train_size} examples")
+    print(f"- Training: {train_batches} batches ({train_batches * config.batch_size} examples)")
+    print(f"- Testing: {num_batches - train_batches} batches ({(num_batches - train_batches) * config.batch_size} examples)")
+    
+    # Print tensor shapes after splitting
+    print("\nTrain data tensor shapes:")
+    for k, v in train_data.items():
+        print(f"{k}: {v.shape}")
+    print("\nTest data tensor shapes:")
+    for k, v in test_data.items():
+        print(f"{k}: {v.shape}")
     
     # Initialize model and move to device
     model = TransformerDecoder(
@@ -203,88 +256,139 @@ def train_decoder(processed_data, config=config):
     
     # Training loop
     for epoch in range(config.num_epochs):
+        # Training phase
         model.train()
+        train_loss = 0
+        train_correct = 0
+        train_tokens = 0
         
-        # Process each split
-        for split_name, split_data in [('train', train_data), ('test', test_data)]:
-            total_loss = 0
-            num_batches = 0
-            total_correct = 0
-            total_tokens = 0
+        # Process training data
+        for batch_idx in tqdm(range(len(train_data['decoder_inputs'])), desc="Training"):
+            # Get batch data
+            decoder_inputs = train_data['decoder_inputs'][batch_idx]  # [batch_size, seq_len, 768]
+            caption_labels = train_data['caption_labels'][batch_idx]  # [batch_size, caption_len]
             
-            # Process in batches
-            batch_size = 32  # Increased from 2 to 32 to better utilize GPU memory
-            num_examples = split_data['decoder_inputs'].size(1)
+            # Permute decoder inputs for transformer [seq_len, batch_size, d_model]
+            decoder_inputs = decoder_inputs.permute(1, 0, 2)
             
-            print(f"\nProcessing {num_examples} examples in batches of {batch_size}")
+            # Forward pass
+            outputs = model(decoder_inputs, decoder_inputs)  # [seq_len, batch_size, vocab_size]
             
-            for i in tqdm(range(0, num_examples, batch_size), desc=f"Training {split_name}"):
-                # Get batch
-                batch_end = min(i + batch_size, num_examples)
-                current_batch_size = batch_end - i
+            # Get only the caption part of the outputs (last 25 tokens - 24 + SOS token)
+            caption_outputs = outputs[-25:, :, :]  # [25, batch_size, vocab_size]
+            
+            # Reshape outputs and labels for loss calculation
+            caption_outputs = caption_outputs.permute(1, 0, 2)  # [batch_size, 25, vocab_size]
+            
+            # Debug prints for first batch
+            if batch_idx == 0:
+                print(f"\nTraining batch shapes:")
+                print(f"caption_outputs: {caption_outputs.shape}")
+                print(f"caption_labels: {caption_labels.shape}")
+            
+            # Convert labels to long type for GPU
+            if config.device == 'cuda':
+                caption_labels = caption_labels.long()
+            
+            # Calculate loss - reshape to match dimensions
+            batch_size = caption_outputs.size(0)
+            seq_len = caption_outputs.size(1)
+            vocab_size = caption_outputs.size(2)
+            
+            # Reshape outputs and labels
+            caption_outputs = caption_outputs.reshape(-1, vocab_size)  # [batch_size * seq_len, vocab_size]
+            caption_labels = caption_labels.reshape(-1)  # [batch_size * seq_len]
+            
+            # Calculate loss
+            loss = criterion(caption_outputs, caption_labels)
+            
+            # Calculate accuracy
+            predictions = torch.argmax(caption_outputs, dim=-1)  # [batch_size * seq_len]
+            correct = (predictions == caption_labels).sum().item()
+            train_correct += correct
+            train_tokens += predictions.numel()
+            
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            train_loss += loss.item()
+            
+            # Clear GPU cache periodically
+            if batch_idx % 10 == 0:
+                torch.cuda.empty_cache()
+        
+        # Calculate training metrics
+        avg_train_loss = train_loss / len(train_data['decoder_inputs'])
+        train_accuracy = (train_correct / train_tokens) * 100 if train_tokens > 0 else 0
+        
+        # Evaluation phase
+        model.eval()  # Set model to evaluation mode
+        test_loss = 0
+        test_correct = 0
+        test_tokens = 0
+        
+        # Process test data
+        with torch.no_grad():  # Disable gradient computation
+            for batch_idx in tqdm(range(len(test_data['decoder_inputs'])), desc="Testing"):
+                # Get batch data
+                decoder_inputs = test_data['decoder_inputs'][batch_idx]
+                caption_labels = test_data['caption_labels'][batch_idx]
                 
-                # Get decoder inputs [seq_len, batch_size, d_model]
-                decoder_inputs = split_data['decoder_inputs'][:, i:batch_end, :]
-                
-                # Get labels [batch_size, seq_len]
-                caption_labels = split_data['caption_labels'][i:batch_end, :]
+                # Permute decoder inputs for transformer
+                decoder_inputs = decoder_inputs.permute(1, 0, 2)
                 
                 # Forward pass
-                outputs = model(decoder_inputs, decoder_inputs)  # [seq_len, batch_size, vocab_size]
+                outputs = model(decoder_inputs, decoder_inputs)
                 
-                # Get only the caption part of the outputs (last config.max_caption_length tokens)
-                caption_outputs = outputs[-config.max_caption_length:, :, :]  # [max_caption_length, batch_size, vocab_size]
+                # Get only the caption part of the outputs
+                caption_outputs = outputs[-25:, :, :]
                 
-                # Reshape outputs and labels for loss calculation
-                caption_outputs = caption_outputs.permute(1, 0, 2)  # [batch_size, seq_len, vocab_size]
+                # Reshape outputs and labels
+                caption_outputs = caption_outputs.permute(1, 0, 2)
                 
                 # Debug prints for first batch
-                if i == 0:
-                    print(f"\nDevice and type information:")
-                    print(f"Device: {config.device}")
-                    print(f"caption_outputs: {caption_outputs.dtype}, device: {caption_outputs.device}")
-                    print(f"caption_labels: {caption_labels.dtype}, device: {caption_labels.device}")
-                    print(f"Output shape: {caption_outputs.shape}")
-                    print(f"Labels shape: {caption_labels.shape}")
+                if batch_idx == 0:
+                    print(f"\nTest batch shapes:")
+                    print(f"caption_outputs: {caption_outputs.shape}")
+                    print(f"caption_labels: {caption_labels.shape}")
                 
                 # Convert labels to long type for GPU
                 if config.device == 'cuda':
                     caption_labels = caption_labels.long()
                 
+                # Reshape for loss calculation
+                caption_outputs = caption_outputs.reshape(-1, caption_outputs.size(-1))
+                caption_labels = caption_labels.reshape(-1)
+                
                 # Calculate loss
-                loss = criterion(caption_outputs.reshape(-1, caption_outputs.size(-1)), 
-                               caption_labels.reshape(-1))
+                loss = criterion(caption_outputs, caption_labels)
                 
                 # Calculate accuracy
-                predictions = torch.argmax(caption_outputs, dim=-1)  # [batch_size, seq_len]
+                predictions = torch.argmax(caption_outputs, dim=-1)
                 correct = (predictions == caption_labels).sum().item()
-                total_correct += correct
-                total_tokens += predictions.numel()
+                test_correct += correct
+                test_tokens += predictions.numel()
                 
-                # Backward pass
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                
-                total_loss += loss.item()
-                num_batches += 1
-                
-                # Clear GPU cache periodically
-                if num_batches % 10 == 0:
-                    torch.cuda.empty_cache()
-            
-            # Calculate metrics
-            avg_loss = total_loss / num_batches if num_batches > 0 else 0
-            accuracy = (total_correct / total_tokens) * 100 if total_tokens > 0 else 0
-            
-            # Log metrics to wandb
-            wandb.log({
-                f"{split_name}_loss": avg_loss,
-                f"{split_name}_accuracy": accuracy,
-                "epoch": epoch
-            })
-            
-            print(f"Epoch {epoch+1}/{config.num_epochs}, {split_name} Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%")
+                test_loss += loss.item()
+        
+        # Calculate test metrics
+        avg_test_loss = test_loss / len(test_data['decoder_inputs'])
+        test_accuracy = (test_correct / test_tokens) * 100 if test_tokens > 0 else 0
+        
+        # Log metrics to wandb
+        wandb.log({
+            "train_loss": avg_train_loss,
+            "train_accuracy": train_accuracy,
+            "test_loss": avg_test_loss,
+            "test_accuracy": test_accuracy,
+            "epoch": epoch
+        })
+        
+        print(f"\nEpoch {epoch+1}/{config.num_epochs}:")
+        print(f"Training - Loss: {avg_train_loss:.4f}, Accuracy: {train_accuracy:.2f}%")
+        print(f"Testing  - Loss: {avg_test_loss:.4f}, Accuracy: {test_accuracy:.2f}%")
     
     # Calculate and log total runtime
     runtime = time.time() - start_time

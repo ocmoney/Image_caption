@@ -48,50 +48,18 @@ class Flickr30k(torch.utils.data.Dataset):
         return result        
 
 if __name__ == '__main__':
-    # Initialize wandb
-    print("Initializing wandb...")
-    wandb.init(project="image-caption", name="flickr30k-dataset")
-    
     # Create dataset
     print("Creating dataset...")
     dataset = Flickr30k(split="train")
-    total_examples = len(dataset)
-    print(f"Dataset size: {total_examples} examples")
+    print(f"Dataset size: {len(dataset)} examples")
     
-    # Create a table to store all sequences
-    columns = ["image", "caption", "sequence"]
-    table = wandb.Table(columns=columns)
-    
-    # Process in chunks of 1000
-    chunk_size = 1000
-    for chunk_start in range(0, total_examples, chunk_size):
-        chunk_end = min(chunk_start + chunk_size, total_examples)
-        print(f"\nProcessing examples {chunk_start} to {chunk_end}...")
-        
-        # Process current chunk
-        for idx in tqdm(range(chunk_start, chunk_end), desc=f"Chunk {chunk_start//chunk_size + 1}"):
-            q = idx // 5
-            r = idx % 5
-            
-            # Get original data
-            image = dataset.split[q]["image"]
-            caption = dataset.split[q]["caption"][r]
-            
-            # Get sequence
-            sequence = dataset[idx]
-            
-            # Add to table
-            table.add_data(
-                wandb.Image(image),
-                caption,
-                sequence  # Store raw tensor
-            )
-        
-        # Log current chunk
-        print(f"Uploading chunk {chunk_start//chunk_size + 1} to wandb...")
-        wandb.log({"sequences": table})
-        print(f"Chunk {chunk_start//chunk_size + 1} uploaded")
-    
-    # Finish wandb run
-    wandb.finish()
-    print("Done!")
+    # Test getting a single example
+    print("\nTesting single example:")
+    sequence = dataset[0]
+    print(f"Sequence shape: {sequence.shape}")
+    print(f"Sequence memory size: {sequence.element_size() * sequence.nelement() / 1024 / 1024:.2f} MB")
+
+    train_loader = DataLoader(Flickr30k(split="train"), batch_size=32, shuffle=True)
+    for batch in train_loader:
+        print(batch.shape)
+        break
