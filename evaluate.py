@@ -43,11 +43,11 @@ if __name__ == "__main__":
         text = [tokenizer.cls_token_id] + [tokenizer.pad_token_id] * 23
         text_token, mask = create_inputs(text, tokenizer)
 
-        for j in range(max_length):
+        for j in range(max_length-1):
             output = model(image, text_token, mask)[:, -max_length:, :]
             #output = temperature_sampling(output[0, j], temperature=0.01, top_k=20)
             output = torch.argmax(output[0, j], dim=-1)
-            text[j] = output.item()
+            text[j+1] = output.item()
             text_token, mask = create_inputs(text, tokenizer)
 
             if output == tokenizer.sep_token_id:
