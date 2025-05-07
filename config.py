@@ -11,7 +11,7 @@ class DecoderConfig:
     dropout: float = 0.1  # Dropout rate
     
     # Training parameters
-    batch_size: int = 8  # Changed from 32 to 8 to match instance value
+    batch_size: int = 32  # Increased from 8 to 32 to better utilize GPU memory
     learning_rate: float = 1e-4
     num_epochs: int = 10
     weight_decay: float = 0.01  # L2 regularization
@@ -23,7 +23,7 @@ class DecoderConfig:
     max_caption_length: int = 32  # Maximum length of captions
     
     # Optional parameters
-    device: str = None  # If None, will use CUDA if available, else CPU
+    device: str = 'cuda'  # If None, will use CUDA if available, else CPU
     seed: int = 42  # Random seed for reproducibility
     
     def __post_init__(self):
@@ -52,17 +52,17 @@ config = DecoderConfig(
     dropout=0.1,
     
     # Training
-    batch_size=8,
+    batch_size=32,
     learning_rate=1e-4,
     num_epochs=10,
     weight_decay=0.01,
     
     # Dataset
-    initial_data_fraction=0.1,  # Use 10% of total data
+    initial_data_fraction=0.5,  # Use 10% of total data
     train_fraction=0.9,  # Split that 10% into 90% train, 10% test
     validation_fraction=0.1,  # 10% for validation
     
     # Optional
-    device=None,  # Auto-select device
+    device='cuda',  # Auto-select device
     seed=42
 ) 
