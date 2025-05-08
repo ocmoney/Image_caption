@@ -17,6 +17,25 @@ def temperature_sampling(logits, temperature=1.0, top_k=20):
     indices = torch.multinomial(probs, 1)
     return topk.indices.gather(dim=-1, index=indices)
 
+def predict_caption(model, image, tokenizer, max_length=24):
+    text = [tokenizer.cls_token_id] + [tokenizer.pad_token_id] * 23
+    text_token, mask = create_inputs(text, tokenizer)
+
+    for j in range(max_length-1):
+        output = model(image, text_token, mask)[:, -max_length:, :]
+        output = torch.argmax(output[0, j], dim=-1)
+        text[j+1] = output.item()
+        text_token, mask = create_inputs(text, tokenizer)
+
+        if output == tokenizer.sep_token_id:
+            break
+
+    text = text[1:]
+    if tokenizer.sep_token_id in text:
+        text = text[:text.index(tokenizer.sep_token_id)]
+
+    return tokenizer.decode(text)
+
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -40,20 +59,9 @@ if __name__ == "__main__":
         pil_image = test_dataset.get_image(i)
         pil_image.save(f"images/{i}.jpg")
 
-        text = [tokenizer.cls_token_id] + [tokenizer.pad_token_id] * 23
-        text_token, mask = create_inputs(text, tokenizer)
+        text = predict_caption(model, image, tokenizer)
 
-        for j in range(max_length-1):
-            output = model(image, text_token, mask)[:, -max_length:, :]
-            #output = temperature_sampling(output[0, j], temperature=0.01, top_k=20)
-            output = torch.argmax(output[0, j], dim=-1)
-            text[j+1] = output.item()
-            text_token, mask = create_inputs(text, tokenizer)
-
-            if output == tokenizer.sep_token_id:
-                break
-
-        print(f"Prediction {i}:\n{tokenizer.decode(text)}")
+        print(f"Prediction {i}:\n{text}")
 
         output = model(image, input_tokens, real_mask)[:, -max_length:, :]
         text_output = torch.argmax(output, dim=-1)
