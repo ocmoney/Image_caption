@@ -1,4 +1,3 @@
-# Import required libraries
 from datasets import load_dataset  # HuggingFace datasets library for loading datasets
 from torch.utils.data import Dataset  # PyTorch's Dataset class for custom datasets
 from transformers import AutoTokenizer, AutoImageProcessor  # For text and image processing
@@ -92,7 +91,4 @@ if __name__ == "__main__":
 
     # Save a sample image
     image = dataset.get_image(200)
-    image.save("test.jpeg")
-
-    print(" Caption length", len(dataset[200]["caption"]))
-
+    image.save("test.jpeg") 
