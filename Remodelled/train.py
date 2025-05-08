@@ -10,6 +10,7 @@ import itertools
 import os
 from safetensors.torch import save_file
 
+
 def compute_accuracy(output, target, pad_token_id):
     output = output.argmax(dim=2)
     mask = target != pad_token_id
@@ -19,24 +20,14 @@ def compute_accuracy(output, target, pad_token_id):
     total_relevant_elements = target.numel()
     return correct_predictions / total_relevant_elements
 
-def train():
-    # Initialize wandb
-    wandb.init(project="captioner", config={
-        "num_epochs": num_epochs,
-        "num_heads": num_heads,
-        "num_layers": num_layers,
-        "learning_rate": learning_rate,
-        "batch_size": batch_size,
-        "model": str(model)
-    })
-    
-    # Set device
+if __name__ == "__main__":
+    # Set device (GPU if available, else CPU)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    
+    print("GPU" if torch.cuda.is_available() else "CPU")
+
     # Set random seed for reproducibility
     torch.manual_seed(42)
-    
+
     # Training hyperparameters
     num_epochs = 10
     num_heads = 6
@@ -45,31 +36,42 @@ def train():
     batch_size = 64
     img_seq_len = 50
     text_seq_len = 24
-    
-    # Create datasets
+
+    # Initialize wandb for experiment tracking
+    wandb.init(project="captioner", config={
+        "num_epochs": num_epochs,
+        "num_heads": num_heads,
+        "num_layers": num_layers,
+        "learning_rate": learning_rate,
+        "batch_size": batch_size
+    })
+
+    # Initialize datasets
     train_dataset = ImageTextDataset(split="train")
     test_dataset = ImageTextDataset(split="test")
-    
-    # Create dataloaders
+
+    # Create data loaders
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=4, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=4, shuffle=False)
-    
-    # Initialize model
+
+    # Initialize model, loss function, and optimizer
     model = CaptionGenerator(num_heads=num_heads, num_layers=num_layers, tokenizer=train_dataset.tokenizer, device=device)
-    
-    # Initialize optimizer and loss function
-    optimizer = Adam(model.parameters(), lr=learning_rate)
     criterion = CrossEntropyLoss(ignore_index=train_dataset.tokenizer.pad_token_id)
-    
+    optimizer = Adam(model.parameters(), lr=learning_rate)
+
+    # Add model architecture to wandb config
+    wandb.config.update({"model": str(model)})
+
     # Training loop
     interval = 100
     for epoch in range(num_epochs):
-        model.train()
+        # Initialize metrics for this epoch
         epoch_loss = []
         epoch_test_loss = []
         epoch_test_accuracy = []
-        
+
         # Training phase
+        model.train()
         train_progress = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]")
         for i, batch in enumerate(train_progress):
             # Get batch data
@@ -106,7 +108,7 @@ def train():
                 for j in range(3):
                     print("Generated:", train_dataset.tokenizer.decode(torch.argmax(logits[j], dim=-1).squeeze().tolist()))
                     print("Ground truth:", train_dataset.tokenizer.decode(output_tokens[j].squeeze().tolist()))
-        
+
         # Evaluation phase
         model.eval()
         test_progress = tqdm(test_dataloader, desc=f"Epoch {epoch+1}/{num_epochs} [Test]")
@@ -160,7 +162,4 @@ def train():
             "epoch": epoch
         })
     
-    wandb.finish()
-
-if __name__ == "__main__":
-    train() 
+    wandb.finish() 
