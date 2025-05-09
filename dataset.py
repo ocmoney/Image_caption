@@ -5,6 +5,7 @@ from transformers import AutoTokenizer, AutoImageProcessor  # For text and image
 import torch  # PyTorch main library
 from torchvision import transforms  # For image transformations
 from functools import lru_cache  # For caching the tokenizer
+import random  # For shuffling
 
 # Convert PIL images to PyTorch tensors
 to_tensor = transforms.ToTensor()
@@ -29,38 +30,53 @@ class ImageTextDataset(Dataset):
         # Initialize CLIP image processor for image processing
         self.processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32", 
                                                           use_fast=True)
+        
+        # Create a list of all image-caption pairs
+        self.data = []
+        for item in self.dataset:
+            image = item["image"]
+            for caption in item["caption"]:
+                self.data.append((image, caption))
+        
+        # Shuffle the data to mix up captions from different images
+        random.seed(42)  # For reproducibility
+        random.shuffle(self.data)
 
     def __len__(self):
-        # Return total number of samples in dataset
-        return len(self.dataset)
+        # Return total number of image-caption pairs
+        return len(self.data)
 
     def __getitem__(self, idx):
-        # Get a single item from the dataset
-        item = self.dataset[idx]
+        # Get a single image-caption pair
+        image, text = self.data[idx]
+        
         # Process image using CLIP processor
-        image = self.processor(item["image"], return_tensors="pt")["pixel_values"][0]
-        # Randomly select one caption from multiple available captions
-        text = item["caption"][torch.randint(0, len(item["caption"]), (1,))]
+        image = self.processor(image, return_tensors="pt")["pixel_values"][0]
+        
         # Tokenize the text with padding and truncation
         inputs = self.tokenizer(text, 
                               return_tensors="pt", 
                               padding='max_length', 
                               truncation=True, 
                               max_length=24)
+        
         # Get input token IDs
         text_token = inputs["input_ids"][0]
+        
         # Create output tokens by shifting input tokens and adding padding
         output_text_token = torch.cat([text_token, 
                                      torch.tensor([self.tokenizer.pad_token_id], 
                                                 dtype=torch.long)])[1:]
+        
         # Create mask for padding tokens
         mask = text_token == self.tokenizer.pad_token_id
+        
         # Return processed image, input tokens, output tokens, and mask
         return image, text_token, output_text_token, mask
     
     def get_image(self, idx):
         # Helper method to get raw image without processing
-        return self.dataset[idx]["image"]
+        return self.data[idx][0]
     
 # Test code
 if __name__ == "__main__":
@@ -94,5 +110,5 @@ if __name__ == "__main__":
     image = dataset.get_image(200)
     image.save("test.jpeg")
 
-    print(" Caption length", len(dataset[200]["caption"]))
+    print("Total number of image-caption pairs:", len(dataset))
 
