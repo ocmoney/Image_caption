@@ -4,3 +4,4 @@ venv/
 wandb
 model/
 images/
+miniconda3/miniconda.sh
