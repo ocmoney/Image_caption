@@ -22,7 +22,7 @@ def load_tokenizer():
 def load_image_processor():
     return AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32", use_fast=True)
 
-model = load_model(num_heads=6, num_layers=8, _tokenizer=load_tokenizer(), run_name="cosmic-yogurt-52", epoch=10)
+model = load_model(num_heads=6, num_layers=8, _tokenizer=load_tokenizer(), run_name="celestial-serenity-1", epoch=1)
 tokenizer = load_tokenizer()
 image_processor = load_image_processor()
 

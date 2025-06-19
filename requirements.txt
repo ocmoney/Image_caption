@@ -7,3 +7,5 @@ wandb
 safetensors
 torchtune
 torchao
+streamlit
+opencv-python
