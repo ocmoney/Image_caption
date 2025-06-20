@@ -50,17 +50,6 @@ if ! conda env list | grep -q "^$ENV_NAME "; then
     conda create -y -n $ENV_NAME python=3.10
 fi
 
-# Activate the environment
-conda activate $ENV_NAME
-
-# Install requirements
-echo "Installing requirements..."
-if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt
-else
-    echo "Warning: requirements.txt not found"
-fi
-
 # Configure Git
 echo "Configuring Git..."
 git config --global user.name "ocmoney"
@@ -127,4 +116,5 @@ cat > .vscode/settings.json << EOL
 EOL
 
 echo "Setup completed successfully!"
-echo "To activate the environment, run: source /opt/conda/etc/profile.d/conda.sh && conda activate $ENV_NAME" 
+echo "To activate the environment, run: source /opt/conda/etc/profile.d/conda.sh && conda activate $ENV_NAME"
+echo "Then install requirements manually with: pip install -r requirements.txt" 
