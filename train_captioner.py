@@ -36,7 +36,7 @@ if __name__ == "__main__":
     num_heads = 6
     num_layers = 8
     learning_rate = 1e-4
-    batch_size = 64
+    batch_size = 128
     img_seq_len = 50
     text_seq_len = 24
 
@@ -62,6 +62,10 @@ if __name__ == "__main__":
         "batch_size": batch_size,
         "model": str(model)
     })
+
+    # Track best model performance
+    best_test_accuracy = 0.0
+    best_epoch = 0
 
     # Training loop
     interval = 100
@@ -127,10 +131,34 @@ if __name__ == "__main__":
                     print("Random sentence:", dataset.tokenizer.decode(torch.argmax(test_output[j], dim=-1).squeeze().tolist()))
                     print("Ground truth:", dataset.tokenizer.decode(test_output_text[j].squeeze().tolist()))         
             
-        # Print epoch summary
-        print(f"\n[Epoch {epoch+1}/{num_epochs}], Train Loss: {torch.tensor(epoch_loss).mean().item():.4f}, Test Loss: {torch.tensor(epoch_test_loss).mean().item():.4f}, Test Accuracy: {torch.tensor(epoch_test_accuracy).mean().item():.4f}")
+        # Calculate epoch averages
+        avg_train_loss = torch.tensor(epoch_loss).mean().item()
+        avg_test_loss = torch.tensor(epoch_test_loss).mean().item()
+        avg_test_accuracy = torch.tensor(epoch_test_accuracy).mean().item()
         
-        # Save model checkpoint
-        model_path = f"model/{wandb.run.name}/transformer_{epoch}.safetensors"
-        os.makedirs(os.path.dirname(model_path), exist_ok=True)
-        save_file(model.state_dict(), model_path)
+        # Print epoch summary
+        print(f"\n[Epoch {epoch+1}/{num_epochs}], Train Loss: {avg_train_loss:.4f}, Test Loss: {avg_test_loss:.4f}, Test Accuracy: {avg_test_accuracy:.4f}")
+        
+        # Check if this is the best model so far
+        if avg_test_accuracy > best_test_accuracy:
+            best_test_accuracy = avg_test_accuracy
+            best_epoch = epoch + 1
+            
+            # Save best model
+            model_path = f"model/{wandb.run.name}/best_model.safetensors"
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            save_file(model.state_dict(), model_path)
+            print(f"New best model saved! Test Accuracy: {best_test_accuracy:.4f} (Epoch {best_epoch})")
+        
+        # Log epoch metrics to wandb
+        wandb.log({
+            "epoch": epoch + 1,
+            "epoch_train_loss": avg_train_loss,
+            "epoch_test_loss": avg_test_loss,
+            "epoch_test_accuracy": avg_test_accuracy,
+            "best_test_accuracy": best_test_accuracy,
+            "best_epoch": best_epoch
+        })
+    
+    print(f"\nTraining completed! Best test accuracy: {best_test_accuracy:.4f} at epoch {best_epoch}")
+    print(f"Best model saved as: model/{wandb.run.name}/best_model.safetensors")
